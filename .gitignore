@@ -1,0 +1,36 @@
+# Go
+bin/
+dist/
+*.exe
+*.test
+*.out
+vendor/
+coverage.out
+coverage.html
+
+# Go build cache (local dev — not committed)
+.cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Docker local state
+docker/volumes/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code local overrides (personal settings, not shared)
+.claude/settings.local.json

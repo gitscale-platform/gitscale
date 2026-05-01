@@ -1,0 +1,38 @@
+name: Spike
+description: Time-boxed research to resolve an open architecture question
+labels: ["type/spike", "decision/in-progress"]
+body:
+  - type: input
+    id: question
+    attributes:
+      label: Question to answer
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Timebox (days)
+    validations:
+      required: true
+  - type: textarea
+    id: success_criteria
+    attributes:
+      label: Done when
+      description: What artifact (ADR, benchmark result, prototype) closes this spike?
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        **After submitting:** assign this issue to the correct decision milestone manually
+        (Issue sidebar → Milestone). GitHub issue forms cannot set milestone metadata
+        from a dropdown — the field below is for body reference only. Milestone assignment
+        is required for the roadmap countdown in GitHub Projects to work.
+  - type: dropdown
+    id: milestone_ref
+    attributes:
+      label: Decision milestone (body reference — assign in sidebar after submit)
+      options:
+        - decisions-june-2026
+        - decisions-july-2026
+        - decisions-august-2026

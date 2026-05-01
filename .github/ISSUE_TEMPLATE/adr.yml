@@ -1,0 +1,38 @@
+name: ADR
+description: Propose or amend an Architecture Decision Record
+labels: ["type/adr"]
+body:
+  - type: input
+    id: adr_number
+    attributes:
+      label: ADR number (next sequential)
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: Decision title
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision
+    validations:
+      required: true
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences
+    validations:
+      required: true
+  - type: textarea
+    id: supersedes
+    attributes:
+      label: Supersedes (if amending an existing ADR)

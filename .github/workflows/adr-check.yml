@@ -1,0 +1,22 @@
+name: ADR cross-reference check
+on: [pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check all ADR references in design_document exist in architecture_document
+        run: |
+          refs=$(grep -oP 'ADR-\d+' design_document.md | sort -u || true)
+          if [ -z "$refs" ]; then
+            echo "No ADR references in design_document.md — nothing to check."
+            exit 0
+          fi
+          missing=0
+          for ref in $refs; do
+            if ! grep -q "$ref" architecture_document.md; then
+              echo "::error ::$ref referenced in design_document.md but not found in architecture_document.md"
+              missing=1
+            fi
+          done
+          exit $missing

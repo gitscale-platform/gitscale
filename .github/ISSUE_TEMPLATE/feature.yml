@@ -1,0 +1,37 @@
+name: Feature
+description: New capability for GitScale
+labels: ["type/feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **After submitting:** apply the correct `plane/*` label manually.
+        GitHub issue forms cannot set labels from dropdown values — the plane
+        field below is for the issue body only. The project auto-add rule
+        depends on `plane/*` labels, so issues will not appear on the board
+        until the label is applied.
+  - type: dropdown
+    id: plane
+    attributes:
+      label: Plane (body reference — apply matching label after submit)
+      options: [Edge, Git, Application, Workflow, Data, Cross-cutting]
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What agent or human workflow does this unblock?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+    validations:
+      required: true
+  - type: textarea
+    id: adr_impact
+    attributes:
+      label: ADR impact
+      description: Does this contradict or amend an existing ADR? If yes, list which ones.
