@@ -13,4 +13,4 @@
 - [ ] All five planes considered for cascading effects
 - [ ] Event schema updated if new Kafka events are introduced
 - [ ] Rate limit and quota implications noted if touching agent identity paths
-- [ ] Design docs updated (problem_statement / design_document / architecture_document)
+- [ ] Design docs updated (docs/design / docs/architecture)

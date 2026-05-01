@@ -5,17 +5,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check all ADR references in design_document exist in architecture_document
+      - name: Check all ADR references in docs/design.md exist in docs/architecture.md
         run: |
-          refs=$(grep -oP 'ADR-\d+' design_document.md | sort -u || true)
+          refs=$(grep -oP 'ADR-\d+' docs/design.md 2>/dev/null | sort -u || true)
           if [ -z "$refs" ]; then
-            echo "No ADR references in design_document.md — nothing to check."
+            echo "No ADR references in docs/design.md — nothing to check."
             exit 0
           fi
           missing=0
           for ref in $refs; do
-            if ! grep -q "$ref" architecture_document.md; then
-              echo "::error ::$ref referenced in design_document.md but not found in architecture_document.md"
+            if ! grep -q "$ref" docs/architecture.md; then
+              echo "::error ::$ref referenced in docs/design.md but not found in docs/architecture.md"
               missing=1
             fi
           done

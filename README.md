@@ -22,4 +22,4 @@ See [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) for issue templates (Fe
 
 Branch naming: `type/plane-short-description` — e.g., `spike/data-cockroachdb-vs-vitess`.
 
-Every merged PR must close at least one issue. Design decisions that change behaviour must reference the relevant ADR from `architecture_document.md §8`.
+Every merged PR must close at least one issue. Design decisions that change behaviour must reference the relevant ADR from `docs/architecture.md §8`.

@@ -53,7 +53,7 @@ State-mutating SQL transactions write the source change **and** an `outbox` row 
 
 ## ADRs
 
-ADRs are tracked in `architecture_document.md §8`. When code changes contradict an ADR, flag the conflict and open a `type/adr` issue before proceeding. If a proposal fills in an implementation detail not covered by any ADR, no new ADR is required — a PR description is sufficient.
+ADRs are tracked in `docs/architecture.md §8`. When code changes contradict an ADR, flag the conflict and open a `type/adr` issue before proceeding. If a proposal fills in an implementation detail not covered by any ADR, no new ADR is required — a PR description is sufficient.
 
 ## Open architecture questions (as of May 2026)
 

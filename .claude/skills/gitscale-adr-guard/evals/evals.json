@@ -1,0 +1,26 @@
+{
+  "skill_name": "gitscale-adr-guard",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "contradicting-rs-on-hot-tier",
+      "prompt": "I'm working on the GitScale repo and about to commit this file. Please check whether the change is consistent with the project's architecture decisions before I push.\n\n```go\n// plane/git/storage/hot/writer.go\npackage hot\n\nimport (\n    \"context\"\n\n    \"github.com/klauspost/reedsolomon\"\n)\n\ntype Writer struct {\n    persistShards func(ctx context.Context, key string, shards [][]byte) error\n}\n\nfunc (w *Writer) Put(ctx context.Context, key string, obj []byte) error {\n    enc, err := reedsolomon.New(10, 4)\n    if err != nil {\n        return err\n    }\n    shards, err := enc.Split(obj)\n    if err != nil {\n        return err\n    }\n    if err := enc.Encode(shards); err != nil {\n        return err\n    }\n    return w.persistShards(ctx, key, shards)\n}\n```\n\nWrite your verdict to the file path you'll be told. Be specific about which architectural decision is involved and what I should do.",
+      "expected_output": "Verdict that the change is contradicting (Reed-Solomon erasure coding on hot tier violates the storage tiering decision binding hot tier to 3x synchronous replication). Recommends opening a type/adr issue before merging. Cites the relevant ADR section in docs/architecture.md.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "eval_name": "conforming-outbox-pattern",
+      "prompt": "Quick ADR-impact check on this change before I push it to the GitScale repo. Adding a repo-create handler.\n\n```go\n// plane/application/repos/create.go\nfunc (s *Service) Create(ctx context.Context, r Repo) error {\n    tx, err := s.db.BeginTx(ctx, nil)\n    if err != nil {\n        return err\n    }\n    defer tx.Rollback()\n\n    if _, err := tx.ExecContext(ctx,\n        `INSERT INTO repositories (id, owner, name) VALUES ($1, $2, $3)`,\n        r.ID, r.Owner, r.Name,\n    ); err != nil {\n        return err\n    }\n\n    payload, _ := json.Marshal(r)\n    if _, err := tx.ExecContext(ctx,\n        `INSERT INTO outbox (event_id, event_type, aggregate_id, payload)\n         VALUES (gen_random_uuid(), 'repo.created', $1, $2)`,\n        r.ID, payload,\n    ); err != nil {\n        return err\n    }\n\n    return tx.Commit()\n}\n```\n\nDoes this conform to the project's ADRs? Save your verdict to the path I'll give you.",
+      "expected_output": "Verdict that the change is conforming. Cites ADR-007 (CockroachDB metadata) and ADR-010 (outbox-based event consistency: state mutation and outbox row in same transaction, ack on DB commit not Kafka publish). Approves the change.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "eval_name": "gap-isa-l-vs-rs-go-pick",
+      "prompt": "I'm doing the spike for picking the erasure coding library on the GitScale platform. I'm leaning toward ISA-L over Reed-Solomon Go because of its CPU intrinsics. Before I write the spike PR, do I need to author a new ADR or amend an existing one? Save your verdict to the path I'll give you.",
+      "expected_output": "Verdict that this is filling a gap (no ADR exists yet for the erasure coding library choice — it's an open architecture question listed in docs/architecture.md with target June 2026). PR description sufficient; no new ADR required at this stage; the ADR follows the spike result. Mentions the open-questions list explicitly.",
+      "files": []
+    }
+  ]
+}

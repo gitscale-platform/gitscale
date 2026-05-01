@@ -34,3 +34,6 @@ Thumbs.db
 
 # Claude Code local overrides (personal settings, not shared)
 .claude/settings.local.json
+
+# Skill eval workspaces — local iteration artifacts, not committed
+.claude/skills/*-workspace/
