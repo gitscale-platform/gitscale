@@ -7,7 +7,7 @@ description: Use when editing GitScale code, schema, infra, or design docs and t
 
 ## Overview
 
-Architecture Decision Records (ADRs) live in `docs/architecture.md §8` and capture binding choices: CockroachDB for metadata, Gitaly for Git RPC, outbox-based event consistency, hot/cold storage tiering, SPIRE/SPIFFE for service identity, Vespa for search, Firecracker for CI isolation, etc.
+Architecture Decision Records (ADRs) live in `docs/architecture.md §8` and capture binding choices: PostgreSQL for metadata, Gitaly for Git RPC, outbox-based event consistency, hot/cold storage tiering, SPIRE/SPIFFE for service identity, Vespa for search, Firecracker for CI isolation, etc.
 
 A contradicting code change without ADR amendment creates silent drift — future readers see an ADR claiming X while code does Y. Guard against this *at edit time*, not at review time.
 
@@ -17,7 +17,7 @@ A contradicting code change without ADR amendment creates silent drift — futur
 
 Trigger when **any** of these are true for a pending edit:
 
-- Touches `plane/data/**` (CockroachDB schema, Kafka topology, DragonflyDB config)
+- Touches `plane/data/**` (PostgreSQL schema, Kafka topology, Redis config)
 - Touches `plane/git/**` (Gitaly client wrappers, storage tier code, pack negotiation)
 - Touches `plane/edge/**` (Envoy WASM filters, identity resolution, token metering)
 - Touches `plane/workflow/**` (Temporal worker, workflow definitions)
@@ -44,15 +44,19 @@ Trigger when **any** of these are true for a pending edit:
 
 | Diff signal | Likely ADR cluster |
 |---|---|
-| `CREATE TABLE`, `ALTER TABLE` in `plane/data/migrations/` | ADR-007 (CockroachDB), ADR-010 (outbox) |
-| Kafka producer/consumer, `outbox` table | ADR-010 (event consistency) |
-| Erasure coding, replication factor, `s3://` writes | ADR (storage tiering) |
-| `gitaly.Client`, raw `git` exec | ADR (Gitaly RPC layer) |
-| `spiffe`, `spire`, JWT-SVID, mTLS cert | ADR-012 (service identity) |
-| `qdrant`, `vespa`, embedding, `cosine` | ADR-021 (search backend) |
-| `firecracker`, `runc`, `gvisor`, container exec | ADR (CI isolation) |
-| `envoy` filter, WASM module, edge token meter | ADR (edge plane) |
-| `temporal.Workflow`, `workflow.Execute` | ADR (workflow plane) |
+| `CREATE TABLE`, `ALTER TABLE` in `plane/data/migrations/` | ADR-006 (PostgreSQL), ADR-008 (outbox) |
+| Kafka producer/consumer, `outbox` table | ADR-008 (event consistency) |
+| Erasure coding, replication factor, `s3://` writes | ADR-001 (storage tiering), ADR-011 (cold-tier encryption) |
+| `gitaly.Client`, raw `git` exec | (pending ADR — Gitaly RPC layer) |
+| `spiffe`, `spire`, JWT-SVID, mTLS cert | ADR-010 (service identity) |
+| `qdrant`, `vespa`, embedding, `cosine` | ADR-016 (search backend) |
+| `firecracker`, `runc`, `gvisor`, container exec | ADR-002 (CI isolation) |
+| `envoy` filter, WASM module, edge token meter | (pending ADR — edge plane) |
+| `temporal.Workflow`, `workflow.Execute` | ADR-003 (workflow orchestration) |
+| GraphQL resolver, schema field, persisted query | ADR-013 (GraphQL named-subset) |
+| Plugin registration, plugin sandbox, `Scorer`/`SignalSource`/`ReputationProvider` | ADR-014 (plugin governance) |
+| Approval policy, plan-hash gating, `ApprovalActivity` | ADR-015 (plan-approval policy) |
+| Gitaly hook metering, two-tier counter, reconciliation | ADR-012 (Gitaly hook metering) |
 
 ## Output Format
 
@@ -82,8 +86,8 @@ func (h *HotTier) Write(ctx context.Context, obj []byte) error {
 
 ```
 ADR-impact: contradicting
-ADRs touched: ADR-storage-tiering
-Reasoning: ADR mandates 3× synchronous replication on hot tier; diff applies
+ADRs touched: ADR-001
+Reasoning: ADR-001 mandates 3× synchronous replication on hot tier; diff applies
   (10,4) Reed-Solomon erasure coding which is reserved for cold tier per
   the same ADR.
 Next step: open type/adr issue first; do not merge.

@@ -8,7 +8,7 @@ Hooks run automatically on tool events. They enforce the GitScale architectural 
 |---|---|---|---|
 | `PreToolUse` | `Edit\|Write\|MultiEdit` | `check-plane-edit.sh` | Soft. Prints plane-specific reminders + recommended skill names when editing `plane/**` |
 | `PreToolUse` | `Bash` | `check-git-commit.sh` | Hard for `git commit*` only. Validates branch name (warn), blocks cross-plane internal imports, blocks golangci-lint failures. Silent for other Bash commands |
-| `PostToolUse` | `Edit\|Write\|MultiEdit` | `check-outbox-pair.sh` | Soft. Warns when a Go file in `plane/application/**` or `plane/data/**` opens a DB transaction without referencing the outbox table (ADR-010) |
+| `PostToolUse` | `Edit\|Write\|MultiEdit` | `check-outbox-pair.sh` | Soft. Warns when a Go file in `plane/application/**` or `plane/data/**` opens a DB transaction without referencing the outbox table (ADR-008) |
 | `Stop` | — | `check-stop.sh` | Soft. When ending a turn on a feature branch ahead of `main` with an open PR, warns if the PR body lacks `Closes/Fixes/Resolves #N` |
 
 Soft = exit 0, output goes to context as a hint. Hard = exit 2, blocks the tool call.

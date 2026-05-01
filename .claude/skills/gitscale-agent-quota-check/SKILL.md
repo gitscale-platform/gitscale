@@ -1,6 +1,6 @@
 ---
 name: gitscale-agent-quota-check
-description: Use when adding or modifying any code path that handles agent identity, authentication, request admission, rate limiting, quota accounting, billing counters, or token metering. Triggers on changes in plane/edge/identity, plane/edge/metering, plane/application/auth, anything stamping a SPIFFE JWT-SVID, anything reading or writing DragonflyDB rate-limit keys, and on new HTTP/gRPC request handlers that aren't gated by an existing middleware. Also triggers on "do I need to meter this?", "is this rate-limited?", "is this on the agent traffic class?". Agent traffic dominates by design — an unmetered, unauthed path becomes a denial-of-quota vector or a free billing leak the moment it ships.
+description: Use when adding or modifying any code path that handles agent identity, authentication, request admission, rate limiting, quota accounting, billing counters, or token metering. Triggers on changes in plane/edge/identity, plane/edge/metering, plane/application/auth, anything stamping a SPIFFE JWT-SVID, anything reading or writing Redis rate-limit keys, and on new HTTP/gRPC request handlers that aren't gated by an existing middleware. Also triggers on "do I need to meter this?", "is this rate-limited?", "is this on the agent traffic class?". Agent traffic dominates by design — an unmetered, unauthed path becomes a denial-of-quota vector or a free billing leak the moment it ships.
 ---
 
 # GitScale Agent Quota Check
@@ -12,7 +12,7 @@ Two of GitScale's three core principles converge on the request-admission layer:
 1. **Agents are the primary traffic class.** Every endpoint is reached by agents at orders-of-magnitude higher rates than humans. Default-allow is wrong; default-meter is right.
 2. **Metering is infrastructure, not a feature.** Rate limits, quota accounting, and billing counters are first-class concerns. They are stamped at the edge in the same hop as identity resolution.
 
-ADR-012 binds service identity to SPIRE/SPIFFE — every workload presents and verifies a JWT-SVID per request. ADR-011 puts the rate-limit and identity caches on DragonflyDB.
+ADR-010 binds service identity to SPIRE/SPIFFE — every workload presents and verifies a JWT-SVID per request. ADR-009 puts the rate-limit and identity caches on Redis.
 
 This skill catches three failure modes:
 
@@ -29,7 +29,7 @@ Trigger on **any** of:
 - A new HTTP route, gRPC method, or WASM filter is added under `plane/edge/...`, `plane/application/api/...`
 - A handler is added that isn't wrapped in the project's standard `auth + meter` middleware chain
 - A SPIFFE / SPIRE / JWT-SVID code path is added, removed, or modified
-- DragonflyDB rate-limit keys are read or written outside the metering layer
+- Redis rate-limit keys are read or written outside the metering layer
 - A billing counter (`pkg/billing/counters/...` or equivalent) is incremented from a new path
 - Token-bucket or sliding-window logic is hand-rolled in a handler instead of using the shared limiter
 - The user asks "do I need to meter this?", "rate limit per what?", "is this an agent path?", "do I need SPIFFE here?"
@@ -42,7 +42,7 @@ Every request that reaches business logic must have, in order:
 
 1. **Identity verified** — SPIFFE JWT-SVID present, signature valid, not expired, audience matches the called service.
 2. **Identity classified** — agent vs. human vs. internal. Each tier has different quota tables.
-3. **Quota deducted** — token bucket or counter decremented in DragonflyDB. If the bucket is empty, return `429` (or gRPC `RESOURCE_EXHAUSTED`).
+3. **Quota deducted** — token bucket or counter decremented in Redis. If the bucket is empty, return `429` (or gRPC `RESOURCE_EXHAUSTED`).
 4. **Counter incremented** — billing counter for the right account is bumped on the way out, not at request start (failed requests don't bill).
 
 | Path origin | Identity check | Quota dimension | Billing |
@@ -119,7 +119,7 @@ Fix:
 | Billing counter incremented before handler runs | Failed requests must not bill. Move increment after handler success. |
 | New endpoint added with `// TODO: add auth later` | "Later" is when the endpoint is already in production traffic. Add the chain in the same PR. |
 | SPIFFE check disabled in dev / test config and forgotten in prod | Use the same chain in dev with a permissive cert. Don't disable the verifier; weaken the policy. |
-| Hand-rolling a token bucket in the handler | The shared limiter in `pkg/limiter/` is correctly atomic across replicas via DragonflyDB. Hand-rolled in-process buckets fail under multi-replica deploys. |
+| Hand-rolling a token bucket in the handler | The shared limiter in `pkg/limiter/` is correctly atomic across replicas via Redis. Hand-rolled in-process buckets fail under multi-replica deploys. |
 | Treating a webhook receiver as "no auth needed because we own it" | Webhook receivers also need SPIFFE — they are services in the mesh. The mesh admission rule applies. |
 
 ## Why This Matters

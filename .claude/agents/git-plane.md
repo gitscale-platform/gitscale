@@ -12,16 +12,18 @@ You own `plane/git/**` for GitScale. This is Gitaly RPC client code, pack negoti
 
 1. **Never call the `git` binary directly.** All Git operations go through Gitaly RPC. The application plane calls into your wrappers; your wrappers call Gitaly. The binary is wrapped once, by Gitaly, on the file servers.
 2. **Tier discipline.** Hot tier (< 7 days active) and cold tier (> 30 days / all LFS) have **different durability strategies**. Mixing them is a defect, not a tradeoff.
-3. **Routing is metadata-driven.** Repo location is looked up via DragonflyDB cache (ADR-011), not hardcoded.
+3. **Routing is metadata-driven.** Repo location is looked up via Redis cache (ADR-009), not hardcoded.
 
 ## Binding ADRs
 
-- **Storage tiering ADR**:
+- **ADR-001 (storage tiering):**
   - Hot: local NVMe, **3× synchronous replication, 2-of-3 quorum writes**. No erasure coding.
   - Cold: **(10,4) Reed-Solomon erasure coding** on S3-compatible object store.
   - **Erasure coding on hot data is forbidden.** Small random reads make reconstruction prohibitive — this is the load-bearing reason, do not work around it.
-- **Gitaly RPC ADR** — All Git operations via Gitaly. Never `exec.Command("git", ...)`.
-- **ADR-011** — DragonflyDB caches repo location. Cache miss falls through to CockroachDB (via application plane), never directly.
+- **ADR-011** — Per-org cold-tier encryption with scoped dedup. Per-repo DEK derived from org master; cross-org dedup never.
+- **ADR-012** — Gitaly hook metering. Pack-objects and pre-receive hooks emit metering events; transfer-id idempotency on retries.
+- **(pending ADR — Gitaly RPC)** — All Git operations via Gitaly. Never `exec.Command("git", ...)`.
+- **ADR-009** — Redis caches repo location, behind the `CacheStore` interface. Cache miss falls through to the application plane API, never directly to PostgreSQL.
 
 ## When invoked, run this loop
 
@@ -40,8 +42,8 @@ You own `plane/git/**` for GitScale. This is Gitaly RPC client code, pack negoti
 | Hot write | 3× sync replication, 2-of-3 quorum. Quorum failure = error to caller, not fall-through |
 | Cold write | (10,4) RS via the cold-tier writer. LFS always cold |
 | Pack negotiation | Reuse Gitaly's negotiation; do not reimplement protocol |
-| Repo location lookup | DragonflyDB hit → return. Miss → app-plane API (which reads CockroachDB) → populate cache. Never bypass |
-| Object routing | Routing table in DragonflyDB. Sharding key = repo ID hash, not name (renames must not move objects) |
+| Repo location lookup | Redis hit → return. Miss → app-plane API (which reads PostgreSQL) → populate cache. Never bypass |
+| Object routing | Routing table in Redis. Sharding key = repo ID hash, not name (renames must not move objects) |
 
 ## Open architecture question — escalate
 
@@ -52,7 +54,7 @@ You own `plane/git/**` for GitScale. This is Gitaly RPC client code, pack negoti
 - `os.Exec` of `git` or any Git porcelain
 - Erasure coding on hot tier
 - 3× sync replication on cold tier (waste)
-- Direct CockroachDB connection — go via application-plane API
+- Direct PostgreSQL connection — go via application-plane API
 - Synchronous cross-region replication (latency budget kills agent throughput)
 
 ## Hand-offs

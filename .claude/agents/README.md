@@ -10,7 +10,7 @@ Routing index. Main Claude dispatches via the `Task` tool with `subagent_type` m
 | [git-plane](git-plane.md) | `plane/git/**` | Gitaly RPC, pack negotiation, hot/cold storage tier, LFS |
 | [application-plane](application-plane.md) | `plane/application/**` | Go services, repo API, PR engine, webhook delivery, outbox writes |
 | [workflow-plane](workflow-plane.md) | `plane/workflow/**` | Temporal workflows + activities, Firecracker microVM provisioning |
-| [data-plane](data-plane.md) | `plane/data/**` | CockroachDB schema, Kafka topology, CDC, DragonflyDB keys, Vespa, Qdrant |
+| [data-plane](data-plane.md) | `plane/data/**` | PostgreSQL schema, Kafka topology, polling outbox consumer, Redis keys, Vespa, Qdrant |
 
 ## Cross-cutting
 

@@ -8,9 +8,9 @@ Project-scoped skills enforcing GitScale's architectural principles, ADRs, and c
 |---|---|---|
 | [`gitscale-adr-guard`](gitscale-adr-guard/SKILL.md) | Edits to code/schema/infra/design docs | ADR conformance vs. `docs/architecture.md §8` |
 | [`gitscale-plane-boundary`](gitscale-plane-boundary/SKILL.md) | Cross-plane imports, shared in-process state | Loose coupling at plane seams (core principle 2) |
-| [`gitscale-outbox-check`](gitscale-outbox-check/SKILL.md) | SQL writes, Kafka producers, new consumers | ADR-010 outbox + idempotent consumers |
+| [`gitscale-outbox-check`](gitscale-outbox-check/SKILL.md) | SQL writes, Kafka producers, new consumers | ADR-008 outbox + idempotent consumers |
 | [`gitscale-storage-tier-lint`](gitscale-storage-tier-lint/SKILL.md) | Storage code, replication / encoding config | Hot 3× sync replication, cold (10,4) RS |
-| [`gitscale-agent-quota-check`](gitscale-agent-quota-check/SKILL.md) | New endpoints, identity / metering / billing paths | SPIFFE + quota + billing chain at every entry (ADR-012, core principle 3) |
+| [`gitscale-agent-quota-check`](gitscale-agent-quota-check/SKILL.md) | New endpoints, identity / metering / billing paths | SPIFFE + quota + billing chain at every entry (ADR-010, core principle 3) |
 | [`gitscale-event-schema`](gitscale-event-schema/SKILL.md) | Kafka topic / payload / consumer changes | Forward-compatible schema evolution + `event_id` idempotency |
 | [`gitscale-issue-pr-link`](gitscale-issue-pr-link/SKILL.md) | Branch creation, PR draft / open | `type/plane-desc` branch, mirrored title, `Closes #N` body |
 | [`gitscale-go-conventions`](gitscale-go-conventions/SKILL.md) | Any `.go` edit | Project Go style beyond `gofmt` / `golangci-lint` |

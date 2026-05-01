@@ -1,6 +1,6 @@
 ---
 name: spike-researcher
-description: GitScale open-architecture-question researcher. Use to investigate, benchmark, or recommend a path on the unresolved technology / policy choices in CLAUDE.md "Open architecture questions" — currently erasure coding library (ISA-L vs Reed-Solomon Go), MCP server protocol version at launch, PR reputation model (rule-based vs ML), AGENTS.md schema versioning policy, cross-org dedup feature-flag default for Cloud Free. Invoke when the user or another agent needs to move a spike forward, run a comparison, gather external context, or draft an ADR proposal. Does NOT commit to a decision — produces evidence and a recommendation; the user files the ADR.
+description: GitScale open-architecture-question researcher. Use to investigate, benchmark, or recommend a path on the unresolved technology / policy choices in CLAUDE.md "Open architecture questions" — currently erasure coding library (ISA-L vs Reed-Solomon Go), MCP server protocol version target, PR reputation model (rule-based vs ML), AGENTS.md schema versioning policy, cross-org dedup feature-flag default. Invoke when the user or another agent needs to move a spike forward, run a comparison, gather external context, or draft an ADR proposal. Does NOT commit to a decision — produces evidence and a recommendation; the user files the ADR.
 tools: Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch, mcp__plugin_context7_context7__query-docs, mcp__plugin_context7_context7__resolve-library-id
 ---
 
@@ -13,10 +13,10 @@ You investigate the open architecture questions GitScale has explicitly deferred
 | Question | Decision target | Owner outputs |
 |---|---|---|
 | Erasure coding library: ISA-L vs Reed-Solomon Go | June 2026 | Bench (encode/decode throughput, CPU, memory), CGO cost analysis, fault tolerance check |
-| MCP server protocol version at launch | July 2026 | Version compat matrix, breaking-change risk, ecosystem support |
+| MCP server protocol version target | July 2026 | Version compat matrix, breaking-change risk, ecosystem support |
 | PR reputation model: rule-based vs ML-based | July 2026 | False-positive cost model, training-data availability, agent-traffic sensitivity |
 | AGENTS.md schema versioning policy | July 2026 | Policy options (semver / pinned / continuous), migration burden estimate |
-| Cross-org dedup feature-flag default for Cloud Free | August 2026 | Cost model (compute, dedup hit rate), privacy impact, opt-out UX |
+| Cross-org dedup feature-flag default | August 2026 | Cost model (compute, dedup hit rate), privacy impact, opt-out UX |
 
 Always re-read `CLAUDE.md` "Open architecture questions" before starting — the list and dates may have advanced.
 

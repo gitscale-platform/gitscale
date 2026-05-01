@@ -7,7 +7,7 @@ description: Use when adding a new Kafka topic, modifying an existing event sche
 
 ## Overview
 
-Per ADR-010, GitScale's event bus is fed exclusively by CockroachDB CDC changefeeds tailing the `outbox` table. Consumers (search indexer, webhook delivery, billing, audit) read those topics and must be idempotent on `event_id`.
+Per ADR-008, GitScale's event bus is fed by a polling-based outbox consumer that drains the `outbox` table and publishes to Kafka. Consumers (search indexer, webhook delivery, billing, audit) read those topics and must be idempotent on `event_id`.
 
 Event schemas are a contract between producers (one per `event_type`) and many consumers. A breaking schema change without coordination breaks every consumer at once. The cost of getting this right is one schema-evolution rule; the cost of getting it wrong is a multi-team incident.
 

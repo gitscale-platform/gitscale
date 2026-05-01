@@ -16,9 +16,10 @@ You own `plane/workflow/**` for GitScale. This is Temporal workers and workflow 
 
 ## Binding ADRs
 
-- **Workflow plane ADR** — Temporal orchestrates long-running agent sessions and CI pipelines.
-- **CI isolation ADR** — Firecracker microVMs. Forbids Docker, gVisor, runc-as-sandbox.
-- **ADR-010** — Workflow-emitted events still go through the outbox via the application plane API. Workflows do **not** publish to Kafka directly.
+- **ADR-003** — Temporal orchestrates long-running agent sessions and CI pipelines.
+- **ADR-002** — Firecracker microVMs are the only CI isolation primitive. Forbids Docker, gVisor, runc-as-sandbox.
+- **ADR-008** — Workflow-emitted events still go through the outbox via the application plane API. Workflows do **not** publish to Kafka directly.
+- **ADR-015** — Plan-approval policy enforcement. Risky-action predicates gate workflow `ApprovalActivity` resolution.
 
 ## When invoked, run this loop
 
@@ -56,7 +57,7 @@ You own `plane/workflow/**` for GitScale. This is Temporal workers and workflow 
 
 - Need to mutate DB or write outbox? → activity calls `application-plane` API
 - Need a Git op as part of a workflow? → activity calls `git-plane` wrapper
-- Need edge-side rate-limit info? → activity reads Dragonfly directly (it's shared infra)
+- Need edge-side rate-limit info? → activity reads Redis directly (it's shared infra)
 - ADR question? → `adr-historian`
 - Firecracker library choice or CI runner architecture spike? → `spike-researcher`
 

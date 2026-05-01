@@ -12,7 +12,7 @@
       "id": 1,
       "eval_name": "conforming-outbox-pattern",
       "prompt": "Quick ADR-impact check on this change before I push it to the GitScale repo. Adding a repo-create handler.\n\n```go\n// plane/application/repos/create.go\nfunc (s *Service) Create(ctx context.Context, r Repo) error {\n    tx, err := s.db.BeginTx(ctx, nil)\n    if err != nil {\n        return err\n    }\n    defer tx.Rollback()\n\n    if _, err := tx.ExecContext(ctx,\n        `INSERT INTO repositories (id, owner, name) VALUES ($1, $2, $3)`,\n        r.ID, r.Owner, r.Name,\n    ); err != nil {\n        return err\n    }\n\n    payload, _ := json.Marshal(r)\n    if _, err := tx.ExecContext(ctx,\n        `INSERT INTO outbox (event_id, event_type, aggregate_id, payload)\n         VALUES (gen_random_uuid(), 'repo.created', $1, $2)`,\n        r.ID, payload,\n    ); err != nil {\n        return err\n    }\n\n    return tx.Commit()\n}\n```\n\nDoes this conform to the project's ADRs? Save your verdict to the path I'll give you.",
-      "expected_output": "Verdict that the change is conforming. Cites ADR-007 (CockroachDB metadata) and ADR-010 (outbox-based event consistency: state mutation and outbox row in same transaction, ack on DB commit not Kafka publish). Approves the change.",
+      "expected_output": "Verdict that the change is conforming. Cites ADR-006 (PostgreSQL metadata) and ADR-008 (outbox-based event consistency: state mutation and outbox row in same transaction, ack on DB commit not Kafka publish). Approves the change.",
       "files": []
     },
     {

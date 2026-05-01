@@ -9,7 +9,7 @@ description: Use when creating a branch, opening a pull request, drafting a PR t
 
 GitScale's contribution model has three hard rules:
 
-1. **Branch naming:** `type/plane-short-description` (e.g., `spike/data-cockroachdb-vs-vitess`, `feat/edge-token-meter-wasm-filter`).
+1. **Branch naming:** `type/plane-short-description` (e.g., `spike/data-postgres-partition-strategy`, `feat/edge-token-meter-wasm-filter`).
 2. **PR title:** mirrors the issue title (e.g., `[Git] Design hot-tier replication quorum protocol`).
 3. **Every merged PR closes at least one issue.** PR body must contain `Closes #N` for some open issue.
 
@@ -61,7 +61,7 @@ Trigger on **any** of:
 **Short description:** kebab-case, ≤ 6 words, focused on the *what*, not the *how*.
 
 Examples:
-- `spike/data-cockroachdb-vs-vitess` ✅
+- `spike/data-postgres-partition-strategy` ✅
 - `feat/edge-token-meter-wasm-filter` ✅
 - `adr/git-storage-tiering-decision` ✅
 - `fix/workflow-temporal-deterministic-clock` ✅

@@ -1,13 +1,13 @@
 ---
 name: gitscale-outbox-check
-description: Use when adding or modifying SQL writes (INSERT, UPDATE, DELETE) in plane/data, plane/application, or anywhere a CockroachDB transaction is opened. Triggers when a Kafka producer is added, when a state mutation lacks a paired outbox row, when a consumer is written that processes events from Kafka, or when the user asks "is this an outbox write?", "do I need to publish an event?", "is this idempotent?". Catches dual-write divergence (DB state ≠ event bus) before it ships — the silent failure mode here is invisible until a downstream consumer (search, billing, webhooks, audit) drifts from reality and someone notices weeks later.
+description: Use when adding or modifying SQL writes (INSERT, UPDATE, DELETE) in plane/data, plane/application, or anywhere a PostgreSQL transaction is opened. Triggers when a Kafka producer is added, when a state mutation lacks a paired outbox row, when a consumer is written that processes events from Kafka, or when the user asks "is this an outbox write?", "do I need to publish an event?", "is this idempotent?". Catches dual-write divergence (DB state ≠ event bus) before it ships — the silent failure mode here is invisible until a downstream consumer (search, billing, webhooks, audit) drifts from reality and someone notices weeks later.
 ---
 
 # GitScale Outbox Check
 
 ## Overview
 
-ADR-010 binds GitScale to outbox-based event consistency. State-mutating SQL transactions write the source change AND a row to the `outbox` table in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. CockroachDB CDC changefeeds tail the outbox and publish to Kafka asynchronously.
+ADR-008 binds GitScale to outbox-based event consistency. State-mutating SQL transactions write the source change AND a row to the `outbox` table in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT ... LIMIT N` loop) drains the outbox and publishes to Kafka asynchronously.
 
 This skill catches three failure modes:
 
@@ -37,7 +37,7 @@ State mutation and outbox row write must be in the **same** `tx.BeginTx → tx.C
 
 ### Rule 2: never produce to Kafka directly from the write path
 
-If you find `kafka.Produce(...)` next to or after a SQL write in the same code path, that's a dual write. Replace with an outbox row. The CDC changefeed handles the Kafka publish.
+If you find `kafka.Produce(...)` next to or after a SQL write in the same code path, that's a dual write. Replace with an outbox row. The polling outbox consumer handles the Kafka publish.
 
 ### Rule 3: consumers idempotent on `event_id`
 
@@ -97,7 +97,7 @@ Fix:
     before tx.Commit():
       INSERT INTO outbox (event_id, event_type, aggregate_id, payload)
         VALUES (gen_random_uuid(), 'repo.created', $1, $2)
-  - Delete the s.kafka.Produce call. CDC changefeed will publish.
+  - Delete the s.kafka.Produce call. The polling outbox consumer will publish.
 ```
 
 ## Common Mistakes
@@ -112,7 +112,7 @@ Fix:
 
 ## Why This Matters
 
-The outbox pattern exists because every dual-write system, eventually, diverges. CockroachDB might commit and Kafka might be unreachable; or Kafka might receive and the DB transaction might roll back. With both writes in one transaction, the only failure is "transaction rolled back, nothing published" — which is correct, the change didn't happen.
+The outbox pattern exists because every dual-write system, eventually, diverges. PostgreSQL might commit and Kafka might be unreachable; or Kafka might receive and the DB transaction might roll back. With both writes in one transaction, the only failure is "transaction rolled back, nothing published" — which is correct, the change didn't happen.
 
 Once divergence sets in, downstream consumers (search index, billing counters, webhook deliveries) silently drift from the source of truth. The drift is unobservable until a customer reports a missing event or an audit finds a stale row. The cost of the drift is hours of manual reconciliation per incident, plus loss of confidence in every counter the system reports.
 

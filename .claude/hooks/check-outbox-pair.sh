@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PostToolUse(Edit|Write|MultiEdit) — flag Go files that open a DB transaction without referencing the outbox table.
-# Soft hook: warns, never blocks. ADR-010 requires same-txn source-row + outbox-row pairing.
+# Soft hook: warns, never blocks. ADR-008 requires same-txn source-row + outbox-row pairing.
 set -euo pipefail
 
 input=$(cat)
@@ -22,7 +22,7 @@ grep -qiE 'outbox|event_id' "$file_path" && mentions_outbox=1
 
 if [[ $opens_tx -eq 1 && $mentions_outbox -eq 0 ]]; then
   printf '[gitscale-hook] %s opens a DB transaction but does not reference outbox / event_id.\n' "$file_path"
-  printf '[gitscale-hook]   ADR-010: state mutations must write source row + outbox row in the same txn.\n'
+  printf '[gitscale-hook]   ADR-008: state mutations must write source row + outbox row in the same txn.\n'
   printf '[gitscale-hook]   If this is a read-only txn, ignore. Otherwise invoke gitscale-outbox-check.\n'
 fi
 

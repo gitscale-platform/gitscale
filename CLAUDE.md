@@ -17,16 +17,16 @@ This is the **implementation repository** for the GitScale platform. Code lives 
 | Component | Technology | Notes |
 |---|---|---|
 | Application plane | **Go** | Primary language |
-| Metadata DB | **CockroachDB** | 5 schema domains: identity, repositories, collaboration, ci, billing |
+| Metadata DB | **PostgreSQL** | 5 schema domains: identity, repositories, collaboration, ci, billing |
 | Git RPC | **Gitaly** (GitLab OSS) | Runs on file servers; do not call Git binaries directly |
 | Workflow orchestration | **Temporal** | Long-running agent sessions, CI pipelines |
 | Edge gateway | **Envoy + WASM** | Identity resolution, token metering at the edge |
-| Rate limit / identity cache | **DragonflyDB** | Redis-compatible; repo-location cache (ADR-011) |
-| Search | **Vespa** | Primary search: code, issues, semantic (ADR-021) |
-| Vector similarity (PR dedup only) | **Qdrant** | Cosine similarity threshold 0.92 (ADR-021); not for customer-facing search |
+| Rate limit / identity cache | **Redis** | Repo-location cache + enforcement counters; behind `CacheStore` interface (ADR-009) |
+| Search | **Vespa** | Primary search: code, issues, semantic (ADR-016) |
+| Vector similarity (PR dedup only) | **Qdrant** | Cosine similarity threshold 0.92 (ADR-016); not for customer-facing search |
 | CI isolation | **Firecracker microVMs** | Hardware boundary; not Docker or gVisor |
-| Service identity / mTLS | **SPIRE/SPIFFE** | JWT-SVID, per-request verification (ADR-012) |
-| Event bus | **Kafka** | Fed via CockroachDB CDC changefeeds from the outbox table (ADR-010) |
+| Service identity / mTLS | **SPIRE/SPIFFE** | JWT-SVID, per-request verification (ADR-010) |
+| Event bus | **Kafka** | Fed by a polling-based outbox consumer reading PostgreSQL outbox tables (ADR-008) |
 
 ## Five planes — directory structure (target)
 
@@ -36,14 +36,14 @@ plane/
   git/         # Gitaly client wrappers, storage tier routing, pack negotiation
   application/ # Repo API, PR engine, webhook delivery (Go services)
   workflow/    # Temporal workers and workflow definitions
-  data/        # CockroachDB schema, migrations, Kafka topology, DragonflyDB config
+  data/        # PostgreSQL schema, migrations, Kafka topology, Redis config
 ```
 
 Failures in one plane must not cascade to others. Cross-plane calls must go through the service API — no direct DB access from the wrong plane.
 
-## Event consistency model (ADR-010)
+## Event consistency model (ADR-008)
 
-State-mutating SQL transactions write the source change **and** an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. CockroachDB CDC changefeeds tail the outbox and publish to Kafka asynchronously. Consumers (search, webhooks, billing, audit) must be idempotent on `event_id`.
+State-mutating SQL transactions write the source change **and** an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT … LIMIT N` loop) drains each outbox table and publishes to Kafka. Consumers (search, webhooks, billing, audit) must be idempotent on `event_id`.
 
 ## Storage tiering
 
@@ -63,14 +63,14 @@ Avoid committing to these until the spike is resolved:
 - MCP server protocol version at launch (July 2026)
 - PR reputation model: rule-based vs. ML-based (July 2026)
 - AGENTS.md schema versioning policy (July 2026)
-- Cross-org dedup feature-flag default for Cloud Free (August 2026)
+- Cross-org dedup feature-flag default (August 2026)
 
 ## Branch and commit conventions
 
 | Artifact | Pattern | Example |
 |---|---|---|
-| Branch | `type/plane-short-description` | `spike/data-cockroachdb-vs-vitess` |
+| Branch | `type/plane-short-description` | `spike/data-postgres-partition-strategy` |
 | PR title | Mirror the issue title | `[Git] Design hot-tier replication quorum protocol` |
-| ADR title | `ADR-NNN: Decision in past tense` | `ADR-007: Adopt CockroachDB for metadata layer` |
+| ADR title | `ADR-NNN: Decision in past tense` | `ADR-006: Adopt PostgreSQL for metadata layer` |
 
 Every merged PR must close at least one issue.

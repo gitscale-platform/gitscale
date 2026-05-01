@@ -12,8 +12,8 @@ remind() { printf '[gitscale-hook] %s\n' "$1"; }
 case "$file_path" in
   */plane/edge/*)
     remind "Edge plane edit detected: $file_path"
-    remind "  ADR-012 SPIRE/SPIFFE: re-verify SVID, never trust upstream-stamped headers."
-    remind "  Metering at edge, not deeper. DragonflyDB (ADR-011) for rate limits."
+    remind "  ADR-010 SPIRE/SPIFFE: re-verify SVID, never trust upstream-stamped headers."
+    remind "  Metering at edge, not deeper. Redis (ADR-009) for rate limits."
     remind "  Recommended skills: gitscale-adr-guard, gitscale-agent-quota-check."
     ;;
   */plane/git/*)
@@ -24,7 +24,7 @@ case "$file_path" in
     ;;
   */plane/application/*)
     remind "Application plane edit detected: $file_path"
-    remind "  ADR-010: state mutations must write source row + outbox row in same txn."
+    remind "  ADR-008: state mutations must write source row + outbox row in same txn."
     remind "  No goroutines for async work — use Temporal (workflow plane)."
     remind "  Recommended skills: gitscale-outbox-check, gitscale-plane-boundary, gitscale-go-conventions."
     ;;
@@ -36,8 +36,8 @@ case "$file_path" in
     ;;
   */plane/data/*)
     remind "Data plane edit detected: $file_path"
-    remind "  Schema: forward-only online migrations. Outbox row shape per ADR-010."
-    remind "  Vespa = primary search. Qdrant = PR dedup only (cosine >= 0.92, ADR-021)."
+    remind "  Schema: forward-only online migrations. Outbox row shape per ADR-008."
+    remind "  Vespa = primary search. Qdrant = PR dedup only (cosine >= 0.92, ADR-016)."
     remind "  Recommended skills: gitscale-event-schema, gitscale-adr-guard."
     ;;
   *docs/architecture.md|*docs/architecture/*)
