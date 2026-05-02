@@ -32,9 +32,12 @@ CREATE TABLE collaboration.pull_requests (
 CREATE INDEX idx_pull_requests_repo_status
   ON collaboration.pull_requests (repo_id, status);
 
+-- No FK on pr_id by design — pull_requests is hash-partitioned (see pg/ overlay) and
+-- PG cannot reference a partitioned table without including the partition key in the FK.
+-- Application plane enforces parent existence.
 CREATE TABLE collaboration.pr_reviews (
   id UUID PRIMARY KEY,
-  pr_id UUID NOT NULL REFERENCES collaboration.pull_requests(id),
+  pr_id UUID NOT NULL,
   reviewer_id UUID NOT NULL,    -- soft ref to identity
   reviewer_type TEXT NOT NULL,
   verdict TEXT NOT NULL,
@@ -71,14 +74,16 @@ CREATE TABLE collaboration.issues (
 CREATE INDEX idx_issues_repo_status
   ON collaboration.issues (repo_id, status);
 
+-- No FK on issue_id/pr_id by design — same partitioning constraint as pr_reviews above.
+-- Application plane enforces parent existence.
 CREATE TABLE collaboration.issue_labels (
-  issue_id UUID NOT NULL REFERENCES collaboration.issues(id),
+  issue_id UUID NOT NULL,
   label TEXT NOT NULL,
   PRIMARY KEY (issue_id, label)
 );
 
 CREATE TABLE collaboration.pr_labels (
-  pr_id UUID NOT NULL REFERENCES collaboration.pull_requests(id),
+  pr_id UUID NOT NULL,
   label TEXT NOT NULL,
   PRIMARY KEY (pr_id, label)
 );
