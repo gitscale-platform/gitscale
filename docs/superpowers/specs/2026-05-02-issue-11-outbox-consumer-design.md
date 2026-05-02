@@ -165,7 +165,7 @@ linger.ms=5
 batch.size=65536
 ```
 
-Partition key: TBD pending #12 reconciliation with ADR-004 — see §13.
+Partition key: `aggregate_id` bytes (locked, see §13).
 
 ## 10. Failure modes
 
@@ -214,19 +214,15 @@ Tracing: each drain cycle gets a span; `PublishBatch` gets a child span with `me
 
 Logs: structured JSON, level `info` for normal cycles only when batch > 0; level `warn` on publish errors; level `error` on update errors.
 
-## 13. Open dependency: partition key (cross-issue with #12)
+## 13. Partition key (resolved with #12)
 
-ADR-004 mandates per-partition ordering on `repo_id` / `org_id`. Issue #12 (Kafka topology) currently specifies `aggregate_id` as the partition key. These are not the same: a `pr.opened` event has `aggregate_id` = PR UUID, not repo UUID, so two PRs on the same repo could land on different partitions and lose repo-level ordering.
+**Decision:** Partition key = `aggregate_id` (UUID), every topic. Locked in [issue #12 spec D1](./2026-05-02-issue-12-kafka-topology-design.md#2-decisions-locked).
 
-**This spec does not pick a side.** It treats the partition key as injected by the producer wrapper from the row, with the column choice deferred to issue #12's resolution. The consumer's interface (`PublishBatch(ctx, topic, batch)`) is unaffected by the eventual decision.
+ADR-004 currently says `repo_id`/`org_id`; this contradicts the decision and is being amended via a `type/adr` issue (cross-cutting prerequisite tracked in #12 spec §11).
 
-Three resolutions are on the table for #12 — captured here only so this spec's interface can support whichever is chosen:
+Producer impl: `producer_kafka.go` sets the Kafka record key to the row's `AggregateID` bytes. No strategy-func indirection needed now that the choice is locked. If a future need for repo-level ordering materializes, the producer wrapper takes a partition-key strategy func then; for v1, the column is hardcoded to `aggregate_id`.
 
-- **R1:** Use `aggregate_id`. ADR-004 amended; per-aggregate ordering only.
-- **R2:** Add `repo_id UUID NULL` column to every outbox row (filled by domain services where applicable; null for org-level events with separate routing).
-- **R3:** Two-tier key: `org_id` for collaboration/repositories topics; `aggregate_id` for identity/billing.
-
-The producer wrapper will read whichever column ends up canonical. **No code in this consumer hardcodes the column name** — the producer impl reads from a `PartitionKey(OutboxRow) []byte` strategy func passed via Config.
+Per-aggregate ordering is preserved. Repo-level or org-level ordering is **not** guaranteed; consumers needing it must reorder by `(aggregate_id, published_at)` after consumption.
 
 ## 14. Domain wiring
 
@@ -313,4 +309,4 @@ The issue's acceptance criteria are kept; this spec adds:
 - [ ] `outbox_oldest_unprocessed_seconds` gauge published per domain.
 - [ ] Integration test covers crash-mid-batch.
 - [ ] Integration test covers two-replica race.
-- [ ] Producer wrapper's partition-key strategy is injected (not hardcoded).
+- [ ] Producer wrapper sets the Kafka record key to the row's `aggregate_id` bytes (locked per #12 D1).
