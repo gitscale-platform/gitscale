@@ -74,3 +74,11 @@ Avoid committing to these until the spike is resolved:
 | ADR title | `ADR-NNN: Decision in past tense` | `ADR-006: Adopt PostgreSQL for metadata layer` |
 
 Every merged PR must close at least one issue.
+
+## CI linter rule
+
+Any PR that adds a new CI linter step must include that linter's config file in the same commit. A linter without config is broken from day one — silent failures (wrong key, wrong file) are worse than no linter at all.
+
+## Local dev setup
+
+Run `make install-hooks` once after cloning to enable the pre-commit markdown lint hook. Run `make lint-md` at any time to check markdown locally.

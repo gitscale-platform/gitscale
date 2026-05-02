@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v markdownlint-cli2 &>/dev/null; then
+  echo "pre-commit: markdownlint-cli2 not found — skipping markdown lint (run 'npm install -g markdownlint-cli2' to enable)" >&2
+  exit 0
+fi
+
+make lint-md
