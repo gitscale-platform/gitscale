@@ -1,0 +1,16 @@
+.PHONY: build test lint generate fmt
+
+build:
+	go build ./...
+
+test:
+	go test ./...
+
+lint:
+	golangci-lint run ./...
+
+generate:
+	go generate ./...
+
+fmt:
+	gofmt -w ./...

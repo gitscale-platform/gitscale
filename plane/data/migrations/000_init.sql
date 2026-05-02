@@ -1,0 +1,3 @@
+-- Migration convention anchor.
+-- Schema domains: identity, repositories, collaboration, ci, billing.
+-- Actual domain migrations follow as 001_identity.sql, 002_repositories.sql, etc.
