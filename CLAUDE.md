@@ -73,6 +73,8 @@ Avoid committing to these until the spike is resolved:
 | PR title | Mirror the issue title | `[Git] Design hot-tier replication quorum protocol` |
 | ADR title | `ADR-NNN: Decision in past tense` | `ADR-006: Adopt PostgreSQL for metadata layer` |
 
+Valid plane names: `edge`, `git`, `application`, `workflow`, `data`. Cross-cutting tooling (hooks, CI config, repo-wide docs) uses `meta` — e.g. `chore/meta-pre-commit-lint-hook`.
+
 Every merged PR must close at least one issue.
 
 ## CI linter rule
