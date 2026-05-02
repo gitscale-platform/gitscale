@@ -1,4 +1,5 @@
 {
+  "_comment": "Rules config only. Ignore patterns go in .markdownlintignore; CLI options (globs, ignores) go in .markdownlint-cli2.jsonc. Unknown keys here are silently discarded.",
   "default": true,
   "MD013": false,
   "MD022": false,

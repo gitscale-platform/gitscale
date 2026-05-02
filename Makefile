@@ -1,4 +1,4 @@
-.PHONY: build test lint generate fmt
+.PHONY: build test lint lint-md install-hooks generate fmt
 
 build:
 	go build ./...
@@ -14,3 +14,9 @@ generate:
 
 fmt:
 	gofmt -w ./...
+
+lint-md:
+	markdownlint-cli2 "**/*.md"
+
+install-hooks:
+	git config core.hooksPath .githooks
