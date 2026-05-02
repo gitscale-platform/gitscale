@@ -4,8 +4,10 @@
       "Glob",
       "Read",
       "Grep",
+      "Skill",
       "WebSearch",
       "WebFetch",
+
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -27,6 +29,13 @@
       "Bash(find:*)",
       "Bash(tree:*)",
       "Bash(column:*)",
+
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr list:*)",
+      "Bash(git fetch:*)",
+      "Bash(git show:*)",
 
       "mcp__plugin_context7_context7__*"
     ]
