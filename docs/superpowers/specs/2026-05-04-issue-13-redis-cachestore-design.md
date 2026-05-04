@@ -70,6 +70,8 @@ plane/data/ratelimit/
   limiter.go               # RateLimiter interface
   limiter_redis.go         # Redis-Lua impl
   limiter_memory.go        # token bucket struct + sync.Mutex
+  namespace.go             # env-prefix wrapper (mirrors cache/store_namespace.go)
+  keys.go                  # TokenBucketKey template
   lua/token_bucket.lua     # take-or-reject script
   limiter_test.go          # compliance suite
 ```
@@ -154,13 +156,13 @@ const (
     // gitscale.identity.events mutations.
     IdentityKey = "identity:%s"  // %s = principal UUID
 
-    // Rate-limit token bucket state. Stored as a small JSON blob:
-    // {tokens: float64, refilled_at: rfc3339}. TTL = 2× window length.
-    TokenBucketKey = "rl:bucket:%s:%s"  // %s = principal UUID, surface
-
-    // Agent session quota. TTL = session lifetime.
+    // Agent session quota. Stored as JSON. CompareAndSwap'd on each
+    // child-agent admission. TTL = session lifetime.
+    // (Atomic-counter pattern lives on RateLimiter, not here.)
     AgentSessionQuotaKey = "quota:session:%s"  // %s = session UUID
 )
+// Token bucket key template lives in plane/data/ratelimit/keys.go,
+// not here — it's consumed by RateLimiter, not CacheStore.
 
 const (
     RepoLocationTTL    = 600 * time.Second
@@ -254,6 +256,10 @@ func decodeRepoLocation(b []byte) (loc *RepoLocation, miss bool, err error) {
 
 ## 9. `RateLimiter` interface
 
+Keys: `plane/data/ratelimit/keys.go` declares `TokenBucketKey = "rl:bucket:%s:%s"` (`%s` = principal UUID, `%s` = surface enum like `git_push`, `pr_open` — must not contain `:`). State is stored as a Redis HASH with fields `tokens` (float) and `last_ms` (int) — see Lua below. **Not** a JSON blob.
+
+Namespacing: `RateLimiter` impls apply the same `gitscale:{env}:` prefix as `CacheStore`. A `WithNamespace(inner RateLimiter, env string) RateLimiter` wrapper lives in `plane/data/ratelimit/namespace.go`. Mirrors §6's `CacheStore` wrapper. Construction at startup applies it once; rest of code passes raw keys.
+
 ```go
 // plane/data/ratelimit/limiter.go
 
@@ -330,7 +336,7 @@ func NewRedisStore(cfg RedisConfig) (CacheStore, error) {
 }
 ```
 
-Both branches return the same `CacheStore`. go-redis/v9 handles transparent routing for `MGet` across cluster shards.
+Both branches return the same `CacheStore`. go-redis/v9 handles transparent routing for `MGet` across cluster shards — but be aware: under Cluster, an `MGet` over N keys spread across S shards is up to S round-trips (pipelined per-shard), not one. Hot-path callers batching across many random UUIDs should expect this. Single-Redis dev path is one round-trip.
 
 | Env | Topology | Connection |
 |---|---|---|
@@ -439,3 +445,6 @@ The issue's acceptance criteria are kept; this spec adds:
 - [ ] Connection config supports both Cluster (prod/staging) and single (dev) without separate code paths above the interface.
 - [ ] TLS via `rediss://` documented as standard for staging + prod.
 - [ ] Identity cache invalidation consumer is explicitly out of scope and tracked as future work.
+- [ ] `RateLimiter` namespacing: `WithNamespace(inner, env)` wrapper present and applied at startup.
+- [ ] `TokenBucketKey` template lives in `plane/data/ratelimit/keys.go`, not in `cache/keys.go`.
+- [ ] Token bucket state stored as Redis HASH (`tokens`, `last_ms` fields), not JSON.
