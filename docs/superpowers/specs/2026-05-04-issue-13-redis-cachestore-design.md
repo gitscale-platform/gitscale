@@ -27,7 +27,7 @@ Both have a Redis impl (prod) and an in-memory impl (tests). Concrete code is wi
 | D4 | Env namespace `gitscale:{env}:` auto-prefixed at `CacheStore` construction | Multi-env Redis safety |
 | D5 | Negative caching in typed helpers, 30s TTL for not-found sentinel | Prevents infinite re-query of deleted entities |
 | D6 | Typed payloads carry `Version int` field; mismatch on deserialize = treat as miss | Schema evolution without manual cache flush |
-| D7 | `CompareAndSwap` impl: Redis Lua script (one round-trip) | Cluster-safe, no WATCH/MULTI complexity |
+| D7 | `CompareAndSwap` impl: Redis Lua script (one round-trip). Sole rich-state mutation primitive on `CacheStore`; `IncrBy` removed. | Cluster-safe; agent-session quota uses CAS on JSON blob (§11) |
 | D8 | `MGet` added to `CacheStore`; pipelined per-shard via go-redis/v9 | Hot-path batch fetches |
 | D9 | TLS via `rediss://` connection string in prod; key-level encryption deferred | Standard Redis posture |
 | D10 | Identity cache 60s TTL; mutations on `gitscale.identity.events` trigger Delete | 60s revocation window documented as accepted risk |
@@ -64,7 +64,6 @@ plane/data/cache/
 
 plane/data/cache/lua/
   cas.lua                  # CompareAndSwap script
-  incr_with_ttl.lua        # atomic INCRBY + EXPIREAT-if-new
 
 plane/data/ratelimit/
   limiter.go               # RateLimiter interface
@@ -94,11 +93,6 @@ type CacheStore interface {
     // Delete is a no-op on a missing key.
     Delete(ctx context.Context, key string) error
 
-    // IncrBy atomically increments and ensures the key has the given absolute
-    // expiry (EXPIREAT semantics — set to expireAt, regardless of existing TTL).
-    // Returns the post-increment value. Single round-trip via Lua.
-    IncrBy(ctx context.Context, key string, delta int64, expireAt time.Time) (int64, error)
-
     // CompareAndSwap sets key=replacement only if its current value equals expected.
     // Returns true on swap, false on mismatch. ttl is applied on success.
     // Single round-trip via Lua.
@@ -112,7 +106,7 @@ var ErrNotFound = errors.New("cache: key not found")
 ```
 
 > **Differences from issue #13's interface:**
-> - `IncrBy` takes `expireAt time.Time` (absolute) instead of a `ttl time.Duration`. Counter windows have a fixed end (e.g., monthly compute reset at the calendar boundary). With relative TTL, every INCRBY refreshes the deadline → the window slides instead of being fixed → you'd quietly keep counting past the intended boundary. Absolute expiry pins the end. Callers using rolling windows can pass `time.Now().Add(d)` on each call and get the same effect as the issue's TTL semantics.
+> - **`IncrBy` removed** from `CacheStore`. The issue's only justification for it was rate-limit counters; those moved to `RateLimiter` (§9). Agent-session quota uses `CompareAndSwap` on a JSON blob (§11). No remaining `CacheStore` consumer needs an atomic counter.
 > - `MGet` added (issue gap).
 > - `Get` returns `ErrNotFound` instead of `nil, nil`. Avoids the always-fragile is-nil-a-miss-or-empty-bytes check.
 
@@ -346,19 +340,47 @@ Both branches return the same `CacheStore`. go-redis/v9 handles transparent rout
 
 TLS (`rediss://`) on staging + prod. Shard count tuned to write rate of `gitscale:prod:rl:bucket:*` keys (the hottest namespace).
 
-## 11. `IncrBy` semantics
+## 11. Agent session quota mechanics
 
-The interface uses `expireAt time.Time` (absolute), not relative TTL. Lua:
+The session quota (`AgentSessionQuotaKey`) is a JSON blob mutated via `CompareAndSwap`, not via an atomic counter. Pattern:
 
-```lua
--- plane/data/cache/lua/incr_with_ttl.lua
--- KEYS[1] = key, ARGV[1] = delta (int), ARGV[2] = expire_at_unix_ms
-local v = redis.call('INCRBY', KEYS[1], tonumber(ARGV[1]))
-redis.call('PEXPIREAT', KEYS[1], tonumber(ARGV[2]))
-return v
+```go
+type SessionQuota struct {
+    Version    int    `json:"v"`
+    SessionID  string `json:"session_id"`
+    Remaining  int64  `json:"remaining"`
+    Capacity   int64  `json:"capacity"`
+    UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// Admit charges `cost` against the parent session's remaining quota.
+// Returns ErrQuotaExceeded if Remaining < cost; otherwise persists the
+// decremented value via CAS. Retries on CAS mismatch up to maxRetries.
+func Admit(ctx context.Context, c CacheStore, sessionID uuid.UUID, cost int64) error {
+    key := fmt.Sprintf(AgentSessionQuotaKey, sessionID)
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        cur, err := c.Get(ctx, key)
+        if err != nil { return err }              // miss = session unknown
+        var q SessionQuota
+        if err := json.Unmarshal(cur, &q); err != nil || q.Version != quotaVersion {
+            return ErrQuotaCorrupt
+        }
+        if q.Remaining < cost { return ErrQuotaExceeded }
+        q.Remaining -= cost
+        q.UpdatedAt = time.Now().UTC()
+        next, _ := json.Marshal(q)
+        ok, err := c.CompareAndSwap(ctx, key, cur, next, sessionTTL)
+        if err != nil { return err }
+        if ok { return nil }
+        // CAS lost → another admission landed first. Retry.
+    }
+    return ErrQuotaContended
+}
 ```
 
-Single round-trip. `PEXPIREAT` is idempotent and re-applied each call — drift across rapid INCRBYs is impossible.
+**Why CAS not atomic counter:** child-agent admission is bounded per session (≤low hundreds, not millions). CAS contention is rare. Trade-off: lose-and-retry on contention vs the operational simplicity of one mutation primitive (CAS) covering all rich-state mutations on `CacheStore`.
+
+`maxRetries` defaults to 3. Beyond that, returns `ErrQuotaContended` and the caller decides whether to retry at a higher level.
 
 ## 12. `CompareAndSwap` semantics
 
@@ -385,12 +407,9 @@ Single key, cluster-safe. Memory impl: `sync.Mutex` around a map lookup-compare-
 - Set + Get round-trip
 - TTL expiry (memory: tick clock; Redis: real wait or `DEBUG SLEEP` — prefer tick + Redis for cluster)
 - MGet with mix of present/absent keys → matching slots are nil
-- IncrBy on new key sets value to delta + applies expiry
-- IncrBy on existing key adds delta + refreshes expiry
 - CAS happy path: expected matches, swap succeeds
 - CAS mismatch: returns false, value unchanged
 - CAS on absent key: expected="" matches, swap succeeds
-- Concurrent IncrBy from N goroutines: final value = N × delta (no lost updates)
 - Concurrent CAS from N goroutines: exactly one succeeds per round
 
 Identical suite for `RateLimiter`:
@@ -432,14 +451,15 @@ Identical suite for `RateLimiter`:
 The issue's acceptance criteria are kept; this spec adds:
 
 - [ ] `RateLimiter` is a separate interface in `plane/data/ratelimit/`, not a method on `CacheStore`.
-- [ ] `IncrBy` takes `expireAt time.Time`, not `ttl time.Duration`.
+- [ ] `IncrBy` is **removed** from `CacheStore` (rate-limit moved to `RateLimiter`; quota uses `CompareAndSwap`).
+- [ ] Agent-session quota is mutated via `CompareAndSwap` on a `SessionQuota` JSON blob (§11), not via an atomic counter.
 - [ ] `MGet` is on `CacheStore`.
 - [ ] `Get` returns `ErrNotFound` on miss (sentinel error, not nil-byte ambiguity).
 - [ ] All keys auto-prefixed via `WithNamespace(inner, env)` wrapper; key templates do not include the prefix.
 - [ ] Typed helpers carry a `Version int` field; mismatch on decode → treat as miss.
 - [ ] Typed helpers cache not-found sentinel with shorter TTL.
 - [ ] Typed helpers wrap loader calls in `singleflight.Group`.
-- [ ] `IncrBy`, `CompareAndSwap`, and token bucket `Take` are each implemented as a single Lua script, single round-trip.
+- [ ] `CompareAndSwap` and token bucket `Take` are each implemented as a single Lua script, single round-trip.
 - [ ] Memory impl accepts `clock.Clock` for deterministic TTL/refill tests.
 - [ ] Compliance suite runs identical cases against both Redis and memory impls.
 - [ ] Connection config supports both Cluster (prod/staging) and single (dev) without separate code paths above the interface.
