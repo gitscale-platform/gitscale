@@ -1,0 +1,3 @@
+# Placeholder. Per-event-type schemas are filed under each domain's service issue.
+# Schema naming: <event_type>.schema.json  (e.g. repo.created.schema.json)
+# Fixture naming: <event_type>.testdata/<sample>.json

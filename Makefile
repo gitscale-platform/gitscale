@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-md install-hooks generate fmt
+.PHONY: build test lint lint-md lint-events install-hooks generate fmt
 
 build:
 	go build ./...
@@ -17,6 +17,9 @@ fmt:
 
 lint-md:
 	markdownlint-cli2 "**/*.md"
+
+lint-events:
+	bash plane/data/kafka/lint-events.sh
 
 install-hooks:
 	git config core.hooksPath .githooks

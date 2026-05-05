@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.dev/schemas/kafka/envelope.json",
+  "title": "EventEnvelope",
+  "description": "Wire format for every event published to a GitScale Kafka topic by the polling outbox consumer (ADR-008). Partition key is aggregate_id (ADR-004).",
+  "type": "object",
+  "required": [
+    "event_id",
+    "aggregate_type",
+    "aggregate_id",
+    "event_type",
+    "schema_version",
+    "payload",
+    "occurred_at",
+    "published_at",
+    "principal_type",
+    "rate_bucket"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID from outbox.event_id. Used for consumer-side idempotency deduplication."
+    },
+    "aggregate_type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Domain aggregate name, e.g. 'pull_request', 'repository'."
+    },
+    "aggregate_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the aggregate. This is the Kafka partition key (ADR-004)."
+    },
+    "event_type": {
+      "type": "string",
+      "pattern": "^[a-z_]+\\.[a-z_]+$",
+      "description": "Dot-separated event name, e.g. 'pr.opened'. Must have a corresponding schema in plane/data/events/<domain>/<event_type>.schema.json."
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+$",
+      "description": "Payload schema version. Incremented only on breaking payload changes."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Domain-specific event body. Shape defined in plane/data/events/<domain>/<event_type>.schema.json."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the domain event occurred (source transaction timestamp, RFC3339 UTC). Use for event-time ordering."
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the outbox consumer published the event to Kafka (RFC3339 UTC)."
+    },
+    "principal_type": {
+      "type": "string",
+      "enum": ["user", "agent", "service"],
+      "description": "Kind of principal that caused the event. Carried from JWT-SVID claims (ADR-010)."
+    },
+    "rate_bucket": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Billing routing key from JWT-SVID claims (ADR-010), e.g. 'agent_pro', 'human_default'."
+    }
+  },
+  "additionalProperties": false
+}
