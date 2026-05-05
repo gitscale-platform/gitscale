@@ -3,7 +3,7 @@ package ratelimit_test
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,11 +52,17 @@ func TestRateLimiter_Redis_Compliance(t *testing.T) {
 		t.Fatalf("redis connection string: %v", err)
 	}
 
-	var counter atomic.Int64
+	var (
+		counterMu sync.Mutex
+		counter   int64
+	)
 
 	factory := func(t *testing.T) (ratelimit.RateLimiter, func(float64), func()) {
 		t.Helper()
-		n := counter.Add(1)
+		counterMu.Lock()
+		counter++
+		n := counter
+		counterMu.Unlock()
 		opt, err := redis.ParseURL(connStr)
 		if err != nil {
 			t.Fatalf("parse redis URL: %v", err)

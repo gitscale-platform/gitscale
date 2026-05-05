@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/gitscale-platform/gitscale/plane/data/ratelimit"
@@ -130,7 +129,10 @@ func RunRateLimiterCompliance(t *testing.T, factory RateLimiterFactory) {
 
 		const capacity = 10.0
 		const goroutines = 30
-		var granted atomic.Int64
+		var (
+			grantedMu sync.Mutex
+			granted   int64
+		)
 		var wg sync.WaitGroup
 		wg.Add(goroutines)
 		for i := 0; i < goroutines; i++ {
@@ -141,15 +143,20 @@ func RunRateLimiterCompliance(t *testing.T, factory RateLimiterFactory) {
 					return
 				}
 				if ok {
-					granted.Add(1)
+					grantedMu.Lock()
+					granted++
+					grantedMu.Unlock()
 				}
 			}()
 		}
 		wg.Wait()
 
 		// With refillPerSec=0, no refill happens. Exactly capacity=10 grants expected.
-		if granted.Load() != int64(capacity) {
-			t.Fatalf("expected %d grants, got %d", int64(capacity), granted.Load())
+		grantedMu.Lock()
+		g := granted
+		grantedMu.Unlock()
+		if g != int64(capacity) {
+			t.Fatalf("expected %d grants, got %d", int64(capacity), g)
 		}
 	})
 }

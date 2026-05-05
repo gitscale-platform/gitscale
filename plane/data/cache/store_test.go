@@ -3,7 +3,7 @@ package cache_test
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,16 +19,24 @@ func TestCacheStore_Memory_Compliance(t *testing.T) {
 	// function below is only safe because the TTL expiry sub-test is NOT
 	// parallel (see compliance.RunCacheStoreCompliance). All other sub-tests
 	// create their own store+clock in factory and do not share state.
-	var clkRef atomic.Pointer[cache.FakeClock]
+	var (
+		clkMu  sync.Mutex
+		clkRef *cache.FakeClock
+	)
 
 	factory := func(t *testing.T) (cache.CacheStore, func()) {
 		t.Helper()
 		clk := cache.NewFakeClock(time.Now())
-		clkRef.Store(clk)
+		clkMu.Lock()
+		clkRef = clk
+		clkMu.Unlock()
 		return cache.NewMemoryStore(clk), func() {}
 	}
 	advance := func(d time.Duration) {
-		if c := clkRef.Load(); c != nil {
+		clkMu.Lock()
+		c := clkRef
+		clkMu.Unlock()
+		if c != nil {
 			c.Advance(d)
 		}
 	}
@@ -58,12 +66,17 @@ func TestCacheStore_Redis_Compliance(t *testing.T) {
 		t.Fatalf("redis connection string: %v", err)
 	}
 
-	// Atomic counter ensures unique namespace per sub-test even from parallel goroutines.
-	var counter atomic.Int64
+	var (
+		counterMu sync.Mutex
+		counter   int64
+	)
 
 	factory := func(t *testing.T) (cache.CacheStore, func()) {
 		t.Helper()
-		n := counter.Add(1)
+		counterMu.Lock()
+		counter++
+		n := counter
+		counterMu.Unlock()
 		raw, err := cache.NewRedisStore(cache.RedisConfig{
 			URL:         connStr,
 			UseCluster:  false,

@@ -6,7 +6,6 @@ package compliance
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -227,7 +226,10 @@ func RunCacheStoreCompliance(t *testing.T, factory CacheStoreFactory, advanceClo
 		}
 
 		const goroutines = 20
-		var wins atomic.Int64
+		var (
+			winsMu sync.Mutex
+			wins   int64
+		)
 		var wg sync.WaitGroup
 		wg.Add(goroutines)
 		for i := 0; i < goroutines; i++ {
@@ -238,14 +240,19 @@ func RunCacheStoreCompliance(t *testing.T, factory CacheStoreFactory, advanceClo
 					return
 				}
 				if ok {
-					wins.Add(1)
+					winsMu.Lock()
+					wins++
+					winsMu.Unlock()
 				}
 			}()
 		}
 		wg.Wait()
 
-		if wins.Load() != 1 {
-			t.Fatalf("expected exactly 1 CAS winner, got %d", wins.Load())
+		winsMu.Lock()
+		w := wins
+		winsMu.Unlock()
+		if w != 1 {
+			t.Fatalf("expected exactly 1 CAS winner, got %d", w)
 		}
 	})
 
