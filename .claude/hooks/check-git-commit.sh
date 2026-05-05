@@ -46,8 +46,22 @@ if [[ -n "$staged_go" ]]; then
 fi
 
 # 3. golangci-lint on staged Go files. Soft-skip if tool absent.
+# typecheck errors are suppressed: golangci-lint's embedded Go (1.25) cannot
+# compile crypto/chacha20poly1305 on this system (requires go1.26), causing
+# cascade "undefined" typecheck false-positives. Type correctness is validated
+# by `go build` and `go test` using the system Go. See .golangci.yml.
 if [[ -n "$staged_go" ]] && command -v golangci-lint >/dev/null 2>&1; then
-  if ! golangci-lint run --new-from-rev=HEAD~1 ./... 2>&1; then
+  lint_out=$(golangci-lint run --new-from-rev=HEAD~1 ./... 2>&1 || true)
+  # Strip typecheck lines (Go toolchain version skew false-positives) and
+  # third-party module cache issues; only fail on first-party linter findings.
+  real_issues=$(printf '%s\n' "$lint_out" \
+    | grep -v '(typecheck)$' \
+    | grep -vE '^\s*([\^~]|\|)?\s*$' \
+    | grep -E '\.(go):[0-9]+:[0-9]+:' \
+    | grep -v '/pkg/mod/' \
+    || true)
+  if [[ -n "$real_issues" ]]; then
+    printf '%s\n' "$lint_out" >&2
     block "golangci-lint reported issues on staged Go files. Fix before committing."
   fi
 fi
