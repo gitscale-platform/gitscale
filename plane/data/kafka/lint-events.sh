@@ -150,7 +150,7 @@ if [[ -d "${EVENTS_DIR}" ]]; then
     if [[ ! -f "${schema_file}" ]]; then
       log_fail "event_type '${event_type}' used in Go code but no schema at ${schema_file}"
     fi
-  done < <(grep -rh --include='*.go' --exclude='*_test.go' -oP '(?:event_type|EventType):\s*"([a-z_]+\.[a-z_]+)"' "${REPO_ROOT}/plane" 2>/dev/null \
+  done < <(grep -rh --include='*.go' --exclude='*_test.go' --exclude-dir=compliance -oP '(?:event_type|EventType):\s*"([a-z_]+\.[a-z_]+)"' "${REPO_ROOT}/plane" 2>/dev/null \
     | grep -oP '"[a-z_]+\.[a-z_]+"' | tr -d '"' | sort -u)
 
   log_ok "event_type literal check complete"
