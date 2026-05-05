@@ -134,21 +134,21 @@ package kafka
 import "testing"
 
 func TestTopicConstants_MatchYAMLNames(t *testing.T) {
-	want := map[string]bool{
-		TopicIdentity: true, TopicIdentityDLQ: true,
-		TopicRepositories: true, TopicRepositoriesDLQ: true,
-		TopicCollaboration: true, TopicCollaborationDLQ: true,
-		TopicCI: true, TopicCIDLQ: true,
-		TopicBilling: true, TopicBillingDLQ: true,
-	}
-	if len(want) != 10 {
-		t.Errorf("expected 10 topic constants, set has %d", len(want))
-	}
-	for name := range want {
-		if name == "" {
-			t.Errorf("a topic constant is empty")
-		}
-	}
+  want := map[string]bool{
+    TopicIdentity: true, TopicIdentityDLQ: true,
+    TopicRepositories: true, TopicRepositoriesDLQ: true,
+    TopicCollaboration: true, TopicCollaborationDLQ: true,
+    TopicCI: true, TopicCIDLQ: true,
+    TopicBilling: true, TopicBillingDLQ: true,
+  }
+  if len(want) != 10 {
+    t.Errorf("expected 10 topic constants, set has %d", len(want))
+  }
+  for name := range want {
+    if name == "" {
+      t.Errorf("a topic constant is empty")
+    }
+  }
 }
 ```
 
@@ -167,16 +167,16 @@ package kafka
 // Topic name constants. Mirror plane/data/kafka/topics.yaml exactly.
 // CI checks names match (see TestTopologyYAML_HasAllConstantTopics in topology_test.go).
 const (
-	TopicIdentity         = "gitscale.identity.events"
-	TopicIdentityDLQ      = "gitscale.identity.events.dlq"
-	TopicRepositories     = "gitscale.repositories.events"
-	TopicRepositoriesDLQ  = "gitscale.repositories.events.dlq"
-	TopicCollaboration    = "gitscale.collaboration.events"
-	TopicCollaborationDLQ = "gitscale.collaboration.events.dlq"
-	TopicCI               = "gitscale.ci.events"
-	TopicCIDLQ            = "gitscale.ci.events.dlq"
-	TopicBilling          = "gitscale.billing.events"
-	TopicBillingDLQ       = "gitscale.billing.events.dlq"
+  TopicIdentity         = "gitscale.identity.events"
+  TopicIdentityDLQ      = "gitscale.identity.events.dlq"
+  TopicRepositories     = "gitscale.repositories.events"
+  TopicRepositoriesDLQ  = "gitscale.repositories.events.dlq"
+  TopicCollaboration    = "gitscale.collaboration.events"
+  TopicCollaborationDLQ = "gitscale.collaboration.events.dlq"
+  TopicCI               = "gitscale.ci.events"
+  TopicCIDLQ            = "gitscale.ci.events.dlq"
+  TopicBilling          = "gitscale.billing.events"
+  TopicBillingDLQ       = "gitscale.billing.events.dlq"
 )
 ```
 
@@ -230,70 +230,70 @@ git commit -m "feat(kafka): topics.yaml + Go topic-name constants (#12)"
 package kafka
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
+  "encoding/json"
+  "os"
+  "path/filepath"
+  "testing"
+  "time"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
+  "github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func TestEventEnvelope_RoundTrip(t *testing.T) {
-	env := EventEnvelope{
-		EventID:       "11111111-1111-4111-8111-111111111111",
-		AggregateType: "pull_request",
-		AggregateID:   "22222222-2222-4222-8222-222222222222",
-		EventType:     "pr.opened",
-		SchemaVersion: "v1",
-		Payload:       json.RawMessage(`{"title":"x"}`),
-		PublishedAt:   time.Now().UTC().Truncate(time.Second),
-	}
-	b, err := json.Marshal(env)
-	if err != nil { t.Fatal(err) }
+  env := EventEnvelope{
+    EventID:       "11111111-1111-4111-8111-111111111111",
+    AggregateType: "pull_request",
+    AggregateID:   "22222222-2222-4222-8222-222222222222",
+    EventType:     "pr.opened",
+    SchemaVersion: "v1",
+    Payload:       json.RawMessage(`{"title":"x"}`),
+    PublishedAt:   time.Now().UTC().Truncate(time.Second),
+  }
+  b, err := json.Marshal(env)
+  if err != nil { t.Fatal(err) }
 
-	var got EventEnvelope
-	if err := json.Unmarshal(b, &got); err != nil { t.Fatal(err) }
-	if got.EventID != env.EventID || got.EventType != env.EventType {
-		t.Errorf("round-trip mismatch: %+v vs %+v", env, got)
-	}
+  var got EventEnvelope
+  if err := json.Unmarshal(b, &got); err != nil { t.Fatal(err) }
+  if got.EventID != env.EventID || got.EventType != env.EventType {
+    t.Errorf("round-trip mismatch: %+v vs %+v", env, got)
+  }
 }
 
 func TestEventEnvelope_ValidatesAgainstSchema(t *testing.T) {
-	wd, _ := os.Getwd()
-	schema, err := jsonschema.Compile(filepath.Join(wd, "envelope.schema.json"))
-	if err != nil { t.Fatalf("compile schema: %v", err) }
+  wd, _ := os.Getwd()
+  schema, err := jsonschema.Compile(filepath.Join(wd, "envelope.schema.json"))
+  if err != nil { t.Fatalf("compile schema: %v", err) }
 
-	env := EventEnvelope{
-		EventID: "11111111-1111-4111-8111-111111111111", AggregateType: "x",
-		AggregateID: "22222222-2222-4222-8222-222222222222", EventType: "x.y",
-		SchemaVersion: "v1", Payload: json.RawMessage(`{}`), PublishedAt: time.Now().UTC(),
-	}
-	b, _ := json.Marshal(env)
-	var v interface{}
-	json.Unmarshal(b, &v)
-	if err := schema.Validate(v); err != nil {
-		t.Errorf("envelope failed schema validation: %v", err)
-	}
+  env := EventEnvelope{
+    EventID: "11111111-1111-4111-8111-111111111111", AggregateType: "x",
+    AggregateID: "22222222-2222-4222-8222-222222222222", EventType: "x.y",
+    SchemaVersion: "v1", Payload: json.RawMessage(`{}`), PublishedAt: time.Now().UTC(),
+  }
+  b, _ := json.Marshal(env)
+  var v interface{}
+  json.Unmarshal(b, &v)
+  if err := schema.Validate(v); err != nil {
+    t.Errorf("envelope failed schema validation: %v", err)
+  }
 }
 
 func TestEventEnvelope_RejectsInvalidEventType(t *testing.T) {
-	wd, _ := os.Getwd()
-	schema, err := jsonschema.Compile(filepath.Join(wd, "envelope.schema.json"))
-	if err != nil { t.Fatal(err) }
+  wd, _ := os.Getwd()
+  schema, err := jsonschema.Compile(filepath.Join(wd, "envelope.schema.json"))
+  if err != nil { t.Fatal(err) }
 
-	env := EventEnvelope{
-		EventID: "11111111-1111-4111-8111-111111111111", AggregateType: "x",
-		AggregateID: "22222222-2222-4222-8222-222222222222",
-		EventType: "BadEventType",  // violates pattern
-		SchemaVersion: "v1", Payload: json.RawMessage(`{}`), PublishedAt: time.Now().UTC(),
-	}
-	b, _ := json.Marshal(env)
-	var v interface{}
-	json.Unmarshal(b, &v)
-	if err := schema.Validate(v); err == nil {
-		t.Error("expected validation error for malformed event_type, got nil")
-	}
+  env := EventEnvelope{
+    EventID: "11111111-1111-4111-8111-111111111111", AggregateType: "x",
+    AggregateID: "22222222-2222-4222-8222-222222222222",
+    EventType: "BadEventType",  // violates pattern
+    SchemaVersion: "v1", Payload: json.RawMessage(`{}`), PublishedAt: time.Now().UTC(),
+  }
+  b, _ := json.Marshal(env)
+  var v interface{}
+  json.Unmarshal(b, &v)
+  if err := schema.Validate(v); err == nil {
+    t.Error("expected validation error for malformed event_type, got nil")
+  }
 }
 ```
 
@@ -316,20 +316,20 @@ Expected: FAIL — `EventEnvelope` undefined.
 package kafka
 
 import (
-	"encoding/json"
-	"time"
+  "encoding/json"
+  "time"
 )
 
 // EventEnvelope is the wire-format wrapper for every event published to
 // any gitscale.*.events topic. See spec §6.
 type EventEnvelope struct {
-	EventID       string          `json:"event_id"`        // UUID — outbox.event_id
-	AggregateType string          `json:"aggregate_type"`  // e.g. "pull_request"
-	AggregateID   string          `json:"aggregate_id"`    // UUID
-	EventType     string          `json:"event_type"`      // e.g. "pr.opened"
-	SchemaVersion string          `json:"schema_version"`  // e.g. "v1"
-	Payload       json.RawMessage `json:"payload"`
-	PublishedAt   time.Time       `json:"published_at"`
+  EventID       string          `json:"event_id"`        // UUID — outbox.event_id
+  AggregateType string          `json:"aggregate_type"`  // e.g. "pull_request"
+  AggregateID   string          `json:"aggregate_id"`    // UUID
+  EventType     string          `json:"event_type"`      // e.g. "pr.opened"
+  SchemaVersion string          `json:"schema_version"`  // e.g. "v1"
+  Payload       json.RawMessage `json:"payload"`
+  PublishedAt   time.Time       `json:"published_at"`
 }
 ```
 
@@ -363,15 +363,15 @@ package kafka
 import "testing"
 
 func TestConsumerGroups_AllPresent(t *testing.T) {
-	for _, g := range []string{
-		GroupSearchIndexer, GroupAuditLog, GroupWebhookFanout,
-		GroupBillingAggregator, GroupColdStorageMigrator,
-	} {
-		if g == "" { t.Errorf("empty consumer group constant") }
-	}
-	if DefaultAutoOffsetReset != "earliest" {
-		t.Errorf("DefaultAutoOffsetReset = %q, want earliest", DefaultAutoOffsetReset)
-	}
+  for _, g := range []string{
+    GroupSearchIndexer, GroupAuditLog, GroupWebhookFanout,
+    GroupBillingAggregator, GroupColdStorageMigrator,
+  } {
+    if g == "" { t.Errorf("empty consumer group constant") }
+  }
+  if DefaultAutoOffsetReset != "earliest" {
+    t.Errorf("DefaultAutoOffsetReset = %q, want earliest", DefaultAutoOffsetReset)
+  }
 }
 ```
 
@@ -383,21 +383,21 @@ Save to `plane/data/kafka/consumer_groups_test.go`.
 package kafka
 
 const (
-	// GroupSearchIndexer consumes ALL 5 main topics. Indexes into Vespa (ADR-016).
-	GroupSearchIndexer = "gitscale.search-indexer"
+  // GroupSearchIndexer consumes ALL 5 main topics. Indexes into Vespa (ADR-016).
+  GroupSearchIndexer = "gitscale.search-indexer"
 
-	// GroupAuditLog consumes ALL 5 main topics. Writes immutable audit records to ClickHouse.
-	GroupAuditLog = "gitscale.audit-log"
+  // GroupAuditLog consumes ALL 5 main topics. Writes immutable audit records to ClickHouse.
+  GroupAuditLog = "gitscale.audit-log"
 
-	// GroupWebhookFanout consumes repositories.events + collaboration.events + ci.events.
-	GroupWebhookFanout = "gitscale.webhook-fanout"
+  // GroupWebhookFanout consumes repositories.events + collaboration.events + ci.events.
+  GroupWebhookFanout = "gitscale.webhook-fanout"
 
-	// GroupBillingAggregator consumes billing.events.
-	GroupBillingAggregator = "gitscale.billing-aggregator"
+  // GroupBillingAggregator consumes billing.events.
+  GroupBillingAggregator = "gitscale.billing-aggregator"
 
-	// GroupColdStorageMigrator consumes repositories.events to learn which repos
-	// crossed the hot→cold boundary (last_active_at > 30d).
-	GroupColdStorageMigrator = "gitscale.cold-storage-migrator"
+  // GroupColdStorageMigrator consumes repositories.events to learn which repos
+  // crossed the hot→cold boundary (last_active_at > 30d).
+  GroupColdStorageMigrator = "gitscale.cold-storage-migrator"
 )
 
 // DefaultAutoOffsetReset — late-binding consumers backfill, not skip.
@@ -438,64 +438,64 @@ go get gopkg.in/yaml.v3
 package kafka
 
 import (
-	"os"
-	"path/filepath"
-	"testing"
+  "os"
+  "path/filepath"
+  "testing"
 )
 
 func loadYAMLFixture(t *testing.T) *Topology {
-	t.Helper()
-	wd, _ := os.Getwd()
-	top, err := LoadTopology(filepath.Join(wd, "topics.yaml"))
-	if err != nil { t.Fatalf("load: %v", err) }
-	return top
+  t.Helper()
+  wd, _ := os.Getwd()
+  top, err := LoadTopology(filepath.Join(wd, "topics.yaml"))
+  if err != nil { t.Fatalf("load: %v", err) }
+  return top
 }
 
 func TestLoadTopology_ParsesAllTopics(t *testing.T) {
-	top := loadYAMLFixture(t)
-	if len(top.Topics) != 10 {
-		t.Errorf("topics = %d, want 10 (5 main + 5 dlq)", len(top.Topics))
-	}
+  top := loadYAMLFixture(t)
+  if len(top.Topics) != 10 {
+    t.Errorf("topics = %d, want 10 (5 main + 5 dlq)", len(top.Topics))
+  }
 }
 
 func TestLoadTopology_DefaultsApplied(t *testing.T) {
-	top := loadYAMLFixture(t)
-	if top.Defaults.ReplicationFactor != 3 {
-		t.Errorf("rf = %d, want 3", top.Defaults.ReplicationFactor)
-	}
-	if top.Defaults.Configs["min.insync.replicas"] != "2" {
-		t.Errorf("min.insync.replicas: %v", top.Defaults.Configs["min.insync.replicas"])
-	}
+  top := loadYAMLFixture(t)
+  if top.Defaults.ReplicationFactor != 3 {
+    t.Errorf("rf = %d, want 3", top.Defaults.ReplicationFactor)
+  }
+  if top.Defaults.Configs["min.insync.replicas"] != "2" {
+    t.Errorf("min.insync.replicas: %v", top.Defaults.Configs["min.insync.replicas"])
+  }
 }
 
 func TestLoadTopology_HasAllConstantTopics(t *testing.T) {
-	top := loadYAMLFixture(t)
-	names := map[string]bool{}
-	for _, t := range top.Topics { names[t.Name] = true }
-	for _, want := range []string{
-		TopicIdentity, TopicIdentityDLQ, TopicRepositories, TopicRepositoriesDLQ,
-		TopicCollaboration, TopicCollaborationDLQ, TopicCI, TopicCIDLQ,
-		TopicBilling, TopicBillingDLQ,
-	} {
-		if !names[want] {
-			t.Errorf("topics.yaml missing %q", want)
-		}
-	}
+  top := loadYAMLFixture(t)
+  names := map[string]bool{}
+  for _, t := range top.Topics { names[t.Name] = true }
+  for _, want := range []string{
+    TopicIdentity, TopicIdentityDLQ, TopicRepositories, TopicRepositoriesDLQ,
+    TopicCollaboration, TopicCollaborationDLQ, TopicCI, TopicCIDLQ,
+    TopicBilling, TopicBillingDLQ,
+  } {
+    if !names[want] {
+      t.Errorf("topics.yaml missing %q", want)
+    }
+  }
 }
 
 func TestLoadTopology_PartitionCountsMatchSpec(t *testing.T) {
-	top := loadYAMLFixture(t)
-	want := map[string]int{
-		TopicIdentity: 12, TopicRepositories: 24, TopicCollaboration: 48,
-		TopicCI: 24, TopicBilling: 12,
-		TopicIdentityDLQ: 1, TopicRepositoriesDLQ: 1, TopicCollaborationDLQ: 1,
-		TopicCIDLQ: 1, TopicBillingDLQ: 1,
-	}
-	for _, topic := range top.Topics {
-		if got, ok := want[topic.Name]; ok && topic.Partitions != got {
-			t.Errorf("%s partitions = %d, want %d", topic.Name, topic.Partitions, got)
-		}
-	}
+  top := loadYAMLFixture(t)
+  want := map[string]int{
+    TopicIdentity: 12, TopicRepositories: 24, TopicCollaboration: 48,
+    TopicCI: 24, TopicBilling: 12,
+    TopicIdentityDLQ: 1, TopicRepositoriesDLQ: 1, TopicCollaborationDLQ: 1,
+    TopicCIDLQ: 1, TopicBillingDLQ: 1,
+  }
+  for _, topic := range top.Topics {
+    if got, ok := want[topic.Name]; ok && topic.Partitions != got {
+      t.Errorf("%s partitions = %d, want %d", topic.Name, topic.Partitions, got)
+    }
+  }
 }
 ```
 
@@ -512,37 +512,37 @@ Expected: FAIL.
 package kafka
 
 import (
-	"fmt"
-	"os"
+  "fmt"
+  "os"
 
-	"gopkg.in/yaml.v3"
+  "gopkg.in/yaml.v3"
 )
 
 type Topology struct {
-	Defaults Defaults `yaml:"defaults"`
-	Topics   []Topic  `yaml:"topics"`
+  Defaults Defaults `yaml:"defaults"`
+  Topics   []Topic  `yaml:"topics"`
 }
 
 type Defaults struct {
-	ReplicationFactor int               `yaml:"replication_factor"`
-	Configs           map[string]string `yaml:"configs"`
+  ReplicationFactor int               `yaml:"replication_factor"`
+  Configs           map[string]string `yaml:"configs"`
 }
 
 type Topic struct {
-	Name        string `yaml:"name"`
-	Partitions  int    `yaml:"partitions"`
-	RetentionMS int64  `yaml:"retention_ms"`
-	Rationale   string `yaml:"rationale"`
+  Name        string `yaml:"name"`
+  Partitions  int    `yaml:"partitions"`
+  RetentionMS int64  `yaml:"retention_ms"`
+  Rationale   string `yaml:"rationale"`
 }
 
 // LoadTopology reads and parses topics.yaml from the given path.
 func LoadTopology(path string) (*Topology, error) {
-	b, err := os.ReadFile(path)
-	if err != nil { return nil, fmt.Errorf("read %s: %w", path, err) }
-	var t Topology
-	if err := yaml.Unmarshal(b, &t); err != nil { return nil, fmt.Errorf("parse %s: %w", path, err) }
-	if t.Defaults.Configs == nil { t.Defaults.Configs = map[string]string{} }
-	return &t, nil
+  b, err := os.ReadFile(path)
+  if err != nil { return nil, fmt.Errorf("read %s: %w", path, err) }
+  var t Topology
+  if err := yaml.Unmarshal(b, &t); err != nil { return nil, fmt.Errorf("parse %s: %w", path, err) }
+  if t.Defaults.Configs == nil { t.Defaults.Configs = map[string]string{} }
+  return &t, nil
 }
 ```
 
@@ -577,74 +577,74 @@ git commit -m "feat(kafka): topics.yaml loader + invariant tests (#12)"
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
-	"log"
-	"os"
-	"strconv"
-	"time"
+  "context"
+  "flag"
+  "fmt"
+  "log"
+  "os"
+  "strconv"
+  "time"
 
-	confluent "github.com/confluentinc/confluent-kafka-go/v2/kafka"
-	gskafka "github.com/gitscale-platform/gitscale/plane/data/kafka"
+  confluent "github.com/confluentinc/confluent-kafka-go/v2/kafka"
+  gskafka "github.com/gitscale-platform/gitscale/plane/data/kafka"
 )
 
 func main() {
-	yamlPath := flag.String("yaml", "plane/data/kafka/topics.yaml", "path to topics.yaml")
-	bootstrap := flag.String("bootstrap", os.Getenv("KAFKA_BOOTSTRAP_SERVERS"), "Kafka bootstrap servers")
-	dryRun := flag.Bool("dry-run", false, "report drift, don't change broker state")
-	flag.Parse()
+  yamlPath := flag.String("yaml", "plane/data/kafka/topics.yaml", "path to topics.yaml")
+  bootstrap := flag.String("bootstrap", os.Getenv("KAFKA_BOOTSTRAP_SERVERS"), "Kafka bootstrap servers")
+  dryRun := flag.Bool("dry-run", false, "report drift, don't change broker state")
+  flag.Parse()
 
-	if *bootstrap == "" {
-		log.Fatal("--bootstrap or KAFKA_BOOTSTRAP_SERVERS required")
-	}
+  if *bootstrap == "" {
+    log.Fatal("--bootstrap or KAFKA_BOOTSTRAP_SERVERS required")
+  }
 
-	top, err := gskafka.LoadTopology(*yamlPath)
-	if err != nil { log.Fatalf("load: %v", err) }
+  top, err := gskafka.LoadTopology(*yamlPath)
+  if err != nil { log.Fatalf("load: %v", err) }
 
-	admin, err := confluent.NewAdminClient(&confluent.ConfigMap{"bootstrap.servers": *bootstrap})
-	if err != nil { log.Fatalf("admin client: %v", err) }
-	defer admin.Close()
+  admin, err := confluent.NewAdminClient(&confluent.ConfigMap{"bootstrap.servers": *bootstrap})
+  if err != nil { log.Fatalf("admin client: %v", err) }
+  defer admin.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+  ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+  defer cancel()
 
-	meta, err := admin.GetMetadata(nil, true, 5000)
-	if err != nil { log.Fatalf("metadata: %v", err) }
+  meta, err := admin.GetMetadata(nil, true, 5000)
+  if err != nil { log.Fatalf("metadata: %v", err) }
 
-	for _, want := range top.Topics {
-		existing, hasIt := meta.Topics[want.Name]
-		if !hasIt || existing.Error.Code() != confluent.ErrNoError {
-			log.Printf("CREATE %s partitions=%d rf=%d", want.Name, want.Partitions, top.Defaults.ReplicationFactor)
-			if *dryRun { continue }
-			cfg := mergedConfig(top.Defaults.Configs, want.RetentionMS)
-			results, err := admin.CreateTopics(ctx, []confluent.TopicSpecification{{
-				Topic:             want.Name,
-				NumPartitions:     want.Partitions,
-				ReplicationFactor: top.Defaults.ReplicationFactor,
-				Config:            cfg,
-			}})
-			if err != nil { log.Fatalf("create %s: %v", want.Name, err) }
-			for _, r := range results {
-				if r.Error.Code() != confluent.ErrNoError && r.Error.Code() != confluent.ErrTopicAlreadyExists {
-					log.Fatalf("create %s: %v", want.Name, r.Error)
-				}
-			}
-		} else if existing.Error.Code() == confluent.ErrNoError && len(existing.Partitions) != want.Partitions {
-			log.Printf("DRIFT %s: broker partitions=%d, yaml=%d (manual rebalance required)", want.Name, len(existing.Partitions), want.Partitions)
-		} else {
-			log.Printf("OK %s partitions=%d", want.Name, want.Partitions)
-		}
-	}
+  for _, want := range top.Topics {
+    existing, hasIt := meta.Topics[want.Name]
+    if !hasIt || existing.Error.Code() != confluent.ErrNoError {
+      log.Printf("CREATE %s partitions=%d rf=%d", want.Name, want.Partitions, top.Defaults.ReplicationFactor)
+      if *dryRun { continue }
+      cfg := mergedConfig(top.Defaults.Configs, want.RetentionMS)
+      results, err := admin.CreateTopics(ctx, []confluent.TopicSpecification{{
+        Topic:             want.Name,
+        NumPartitions:     want.Partitions,
+        ReplicationFactor: top.Defaults.ReplicationFactor,
+        Config:            cfg,
+      }})
+      if err != nil { log.Fatalf("create %s: %v", want.Name, err) }
+      for _, r := range results {
+        if r.Error.Code() != confluent.ErrNoError && r.Error.Code() != confluent.ErrTopicAlreadyExists {
+          log.Fatalf("create %s: %v", want.Name, r.Error)
+        }
+      }
+    } else if existing.Error.Code() == confluent.ErrNoError && len(existing.Partitions) != want.Partitions {
+      log.Printf("DRIFT %s: broker partitions=%d, yaml=%d (manual rebalance required)", want.Name, len(existing.Partitions), want.Partitions)
+    } else {
+      log.Printf("OK %s partitions=%d", want.Name, want.Partitions)
+    }
+  }
 
-	fmt.Println("topology applied")
+  fmt.Println("topology applied")
 }
 
 func mergedConfig(defaults map[string]string, retentionMS int64) map[string]string {
-	out := make(map[string]string, len(defaults)+1)
-	for k, v := range defaults { out[k] = v }
-	out["retention.ms"] = strconv.FormatInt(retentionMS, 10)
-	return out
+  out := make(map[string]string, len(defaults)+1)
+  for k, v := range defaults { out[k] = v }
+  out["retention.ms"] = strconv.FormatInt(retentionMS, 10)
+  return out
 }
 ```
 
@@ -731,91 +731,91 @@ git commit -m "feat(events): per-domain schema directory layout (#12)"
 package main
 
 import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
+  "encoding/json"
+  "flag"
+  "fmt"
+  "os"
+  "path/filepath"
+  "regexp"
+  "strings"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
+  "github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 var eventTypePattern = regexp.MustCompile(`^[a-z_]+\.[a-z_]+\.schema\.json$`)
 
 func main() {
-	root := flag.String("root", "plane/data/events", "events directory root")
-	flag.Parse()
+  root := flag.String("root", "plane/data/events", "events directory root")
+  flag.Parse()
 
-	failures := 0
+  failures := 0
 
-	domains, err := os.ReadDir(*root)
-	if err != nil { fail("read %s: %v", *root, err) }
+  domains, err := os.ReadDir(*root)
+  if err != nil { fail("read %s: %v", *root, err) }
 
-	for _, dom := range domains {
-		if !dom.IsDir() { continue }
-		domPath := filepath.Join(*root, dom.Name())
-		entries, _ := os.ReadDir(domPath)
-		for _, e := range entries {
-			if !e.IsDir() && eventTypePattern.MatchString(e.Name()) {
-				if !validateSchemaAndFixtures(domPath, e.Name()) {
-					failures++
-				}
-			}
-		}
-	}
+  for _, dom := range domains {
+    if !dom.IsDir() { continue }
+    domPath := filepath.Join(*root, dom.Name())
+    entries, _ := os.ReadDir(domPath)
+    for _, e := range entries {
+      if !e.IsDir() && eventTypePattern.MatchString(e.Name()) {
+        if !validateSchemaAndFixtures(domPath, e.Name()) {
+          failures++
+        }
+      }
+    }
+  }
 
-	if failures > 0 {
-		fmt.Fprintf(os.Stderr, "lint-events: %d failure(s)\n", failures)
-		os.Exit(1)
-	}
-	fmt.Println("lint-events: ok")
+  if failures > 0 {
+    fmt.Fprintf(os.Stderr, "lint-events: %d failure(s)\n", failures)
+    os.Exit(1)
+  }
+  fmt.Println("lint-events: ok")
 }
 
 func validateSchemaAndFixtures(dir, schemaFile string) bool {
-	schemaPath := filepath.Join(dir, schemaFile)
-	schema, err := jsonschema.Compile(schemaPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  %s: invalid schema: %v\n", schemaPath, err)
-		return false
-	}
+  schemaPath := filepath.Join(dir, schemaFile)
+  schema, err := jsonschema.Compile(schemaPath)
+  if err != nil {
+    fmt.Fprintf(os.Stderr, "  %s: invalid schema: %v\n", schemaPath, err)
+    return false
+  }
 
-	eventType := strings.TrimSuffix(schemaFile, ".schema.json")
-	testdata := filepath.Join(dir, eventType+".testdata")
-	st, err := os.Stat(testdata)
-	if err != nil || !st.IsDir() {
-		fmt.Fprintf(os.Stderr, "  %s: missing %s/ fixtures dir\n", schemaPath, testdata)
-		return false
-	}
-	fixtures, _ := os.ReadDir(testdata)
-	count := 0
-	ok := true
-	for _, f := range fixtures {
-		if filepath.Ext(f.Name()) != ".json" { continue }
-		count++
-		b, _ := os.ReadFile(filepath.Join(testdata, f.Name()))
-		var v interface{}
-		if err := json.Unmarshal(b, &v); err != nil {
-			fmt.Fprintf(os.Stderr, "  %s: invalid JSON: %v\n", f.Name(), err)
-			ok = false
-			continue
-		}
-		if err := schema.Validate(v); err != nil {
-			fmt.Fprintf(os.Stderr, "  %s: schema violation: %v\n", f.Name(), err)
-			ok = false
-		}
-	}
-	if count == 0 {
-		fmt.Fprintf(os.Stderr, "  %s: no fixtures in %s\n", schemaPath, testdata)
-		ok = false
-	}
-	return ok
+  eventType := strings.TrimSuffix(schemaFile, ".schema.json")
+  testdata := filepath.Join(dir, eventType+".testdata")
+  st, err := os.Stat(testdata)
+  if err != nil || !st.IsDir() {
+    fmt.Fprintf(os.Stderr, "  %s: missing %s/ fixtures dir\n", schemaPath, testdata)
+    return false
+  }
+  fixtures, _ := os.ReadDir(testdata)
+  count := 0
+  ok := true
+  for _, f := range fixtures {
+    if filepath.Ext(f.Name()) != ".json" { continue }
+    count++
+    b, _ := os.ReadFile(filepath.Join(testdata, f.Name()))
+    var v interface{}
+    if err := json.Unmarshal(b, &v); err != nil {
+      fmt.Fprintf(os.Stderr, "  %s: invalid JSON: %v\n", f.Name(), err)
+      ok = false
+      continue
+    }
+    if err := schema.Validate(v); err != nil {
+      fmt.Fprintf(os.Stderr, "  %s: schema violation: %v\n", f.Name(), err)
+      ok = false
+    }
+  }
+  if count == 0 {
+    fmt.Fprintf(os.Stderr, "  %s: no fixtures in %s\n", schemaPath, testdata)
+    ok = false
+  }
+  return ok
 }
 
 func fail(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	os.Exit(2)
+  fmt.Fprintf(os.Stderr, format+"\n", args...)
+  os.Exit(2)
 }
 ```
 
@@ -828,7 +828,7 @@ Add to `Makefile`:
 ```makefile
 .PHONY: lint-events
 lint-events:
-	go run ./tools/lint-events --root plane/data/events
+  go run ./tools/lint-events --root plane/data/events
 ```
 
 - [ ] **Step 3: Run lint-events with empty domains (no schemas yet) — should pass cleanly**
@@ -857,41 +857,41 @@ Adjust: instead, write a self-test Go test for the linter. Add `tools/lint-event
 package main
 
 import (
-	"os"
-	"path/filepath"
-	"testing"
+  "os"
+  "path/filepath"
+  "testing"
 )
 
 func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { t.Fatal(err) }
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { t.Fatal(err) }
+  t.Helper()
+  if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { t.Fatal(err) }
+  if err := os.WriteFile(path, []byte(content), 0o644); err != nil { t.Fatal(err) }
 }
 
 func TestValidateSchemaAndFixtures_HappyPath(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "test_x.evt_y.schema.json"), `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["x"],"properties":{"x":{"type":"integer"}}}`)
-	writeFile(t, filepath.Join(dir, "test_x.evt_y.testdata", "ok.json"), `{"x":1}`)
-	if !validateSchemaAndFixtures(dir, "test_x.evt_y.schema.json") {
-		t.Error("expected pass")
-	}
+  dir := t.TempDir()
+  writeFile(t, filepath.Join(dir, "test_x.evt_y.schema.json"), `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["x"],"properties":{"x":{"type":"integer"}}}`)
+  writeFile(t, filepath.Join(dir, "test_x.evt_y.testdata", "ok.json"), `{"x":1}`)
+  if !validateSchemaAndFixtures(dir, "test_x.evt_y.schema.json") {
+    t.Error("expected pass")
+  }
 }
 
 func TestValidateSchemaAndFixtures_NoFixtures(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "test_x.evt_y.schema.json"), `{"type":"object"}`)
-	if validateSchemaAndFixtures(dir, "test_x.evt_y.schema.json") {
-		t.Error("expected fail (no fixtures)")
-	}
+  dir := t.TempDir()
+  writeFile(t, filepath.Join(dir, "test_x.evt_y.schema.json"), `{"type":"object"}`)
+  if validateSchemaAndFixtures(dir, "test_x.evt_y.schema.json") {
+    t.Error("expected fail (no fixtures)")
+  }
 }
 
 func TestValidateSchemaAndFixtures_FixtureViolation(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "test_x.evt_y.schema.json"), `{"type":"object","required":["x"],"properties":{"x":{"type":"integer"}}}`)
-	writeFile(t, filepath.Join(dir, "test_x.evt_y.testdata", "bad.json"), `{"x":"not-an-integer"}`)
-	if validateSchemaAndFixtures(dir, "test_x.evt_y.schema.json") {
-		t.Error("expected fail (fixture violates schema)")
-	}
+  dir := t.TempDir()
+  writeFile(t, filepath.Join(dir, "test_x.evt_y.schema.json"), `{"type":"object","required":["x"],"properties":{"x":{"type":"integer"}}}`)
+  writeFile(t, filepath.Join(dir, "test_x.evt_y.testdata", "bad.json"), `{"x":"not-an-integer"}`)
+  if validateSchemaAndFixtures(dir, "test_x.evt_y.schema.json") {
+    t.Error("expected fail (fixture violates schema)")
+  }
 }
 ```
 
