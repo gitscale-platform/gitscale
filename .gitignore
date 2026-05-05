@@ -37,3 +37,5 @@ Thumbs.db
 
 # Skill eval workspaces — local iteration artifacts, not committed
 .claude/skills/*-workspace/
+.claude/worktrees/
+go.work.sum
