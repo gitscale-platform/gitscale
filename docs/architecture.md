@@ -538,6 +538,45 @@ Consequences: <positive, negative, follow-ups>
 - **Context:** Edge-plane identity resolution and per-agent rate limiting need a fast key-value store with pub/sub for cache invalidation. The Git proxy also needs a repo-location cache that survives a metadata-DB outage for ~1 hour of degraded-mode push/pull serving. The cache implementation must sit behind a swap-friendly interface so alternative engines can plug in.
 - **Decision:** Redis serves the rate-limit, identity, and repo-location caches behind a `CacheStore` Go interface defined in `plane/data/`. Repo-location cache TTL is 600s with last-known-location grace served during metadata-DB outage; ACL invalidations propagate via Kafka invalidation events that cache nodes also subscribe to. Sub-second enforcement counters are AOF-durable.
 - **Consequences:** Decouples push/pull serving from metadata-DB availability for ~1 h of degraded-mode coverage. AOF durability for enforcement counters. Alternate `CacheStore` implementations slot in without touching call sites.
+- **Amendment 2026-05-06 — repo-location cache contract.** The original decision named TTL and invalidation propagation but left the payload struct, key shape, and event list undefined. Closed by issue #17.
+
+  **Key shape.** `repo:loc:<repo-uuid>` under the `gitscale:<env>:` namespace prefix applied by `cache.WithNamespace`. Keys never include the namespace prefix at definition time.
+
+  **Payload struct (versioned).** JSON, with a top-level integer `v` field. Current version is 1.
+
+  ```json
+  {
+    "v": 1,
+    "replica_set_id": "<gitaly replica set id>",
+    "home_region": "<region anchor>",
+    "acl_fingerprint": "<sha-256 hex of canonicalised repo_permissions rows>"
+  }
+  ```
+
+  - `replica_set_id`, `home_region` — sourced from `repositories.repositories` (#7).
+  - `acl_fingerprint` — derived field, computed in the loader from the repo's `repo_permissions` rows; opaque to consumers; used to detect stale ACL state without forcing a full read of the permissions table.
+  - Decoders MUST treat any payload whose `v` does not match the expected version as a miss and re-load. This permits forward-incompatible changes without a global flush.
+
+  **Negative-cache sentinel.** A miss for a non-existent repo is cached as `{"v":1,"_miss":true}` with TTL `RepoLocationNotFoundTTL = 30s`. Prevents thundering herd against the metadata DB for paths that scan non-existent repo URLs (404 spam, fuzzers).
+
+  **TTLs.**
+
+  - `RepoLocationTTL = 600s` — matches the original decision; covers ~1 h degraded-mode service via the grace-serve path.
+  - `RepoLocationNotFoundTTL = 30s` — short enough that a freshly created repo becomes resolvable quickly; long enough to absorb 404 storms.
+
+  **In-process miss collapsing.** Each pod uses `singleflight` keyed on the cache key, so concurrent cache misses for the same repo result in one loader call per pod per TTL expiry — never one per request.
+
+  **Invalidation triggers (Kafka events on `gitscale.repositories.events`).** Subscribers to the repo-location cache MUST act on these event types. Names are normative — emitters and consumers MUST use these strings exactly:
+
+  - `repo.created` — write-through prime: `SetRepoLocation` (cache ahead of first read).
+  - `repo.replica_set_changed` — delete key (location drift).
+  - `repo.home_region_changed` — delete key (location drift).
+  - `repo.permissions_changed` — delete key (ACL fingerprint stale).
+  - `repo.deleted` — delete key; the next miss writes the negative-cache sentinel.
+
+  **Resilience contract.** During a Kafka outage, cache nodes serve last-known location for the full TTL plus a grace window; the original decision's "~1 h degraded-mode coverage" continues to hold because invalidation is best-effort within the TTL window, not synchronous.
+
+  **Implementation reference.** The contract above is implemented in `plane/data/cache/repo_location.go` and `plane/data/cache/keys.go` (#13). A separate consumer that performs the deletes is tracked under [identity-cache-invalidator pattern, #27] and the equivalent repo-location-cache invalidator (future issue, follows the same template).
 
 ### ADR-010: Adopted SPIRE/SPIFFE for service identity and end-to-end principal propagation
 
