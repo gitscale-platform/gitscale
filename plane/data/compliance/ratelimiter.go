@@ -43,8 +43,9 @@ func RunRateLimiterCompliance(t *testing.T, factory RateLimiterFactory) {
 		defer cleanup()
 		ctx := context.Background()
 
-		// Drain the 5-token bucket in one shot.
-		granted, _, err := lim.Take(ctx, "exhaust-bucket", 5, 1, 5)
+		// Drain the 5-token bucket in one shot; refillPerSec=0 so no tokens
+		// accumulate between calls even under real-time Redis round-trip latency.
+		granted, _, err := lim.Take(ctx, "exhaust-bucket", 5, 0, 5)
 		if err != nil {
 			t.Fatalf("Take (drain): %v", err)
 		}
@@ -53,7 +54,7 @@ func RunRateLimiterCompliance(t *testing.T, factory RateLimiterFactory) {
 		}
 
 		// Next take should be denied.
-		granted, remaining, err := lim.Take(ctx, "exhaust-bucket", 5, 1, 1)
+		granted, remaining, err := lim.Take(ctx, "exhaust-bucket", 5, 0, 1)
 		if err != nil {
 			t.Fatalf("Take (denied): %v", err)
 		}
