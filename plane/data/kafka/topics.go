@@ -1,23 +1,39 @@
-// Package kafka defines Kafka topic name constants and shared types used by
-// the outbox consumer and downstream event consumers (ADR-004, ADR-008).
+// Package kafka defines the Kafka topic and consumer-group name constants for
+// the GitScale event bus, the EventEnvelope type, and topology helpers.
 //
-// Topic naming convention: gitscale.<domain>.events
-// Partition key: aggregate_id (ADR-004, amended 2026-05-04).
+// Partition key for every topic is aggregate_id (UUID) per ADR-004.
+// Events reach Kafka only through the polling outbox consumer per ADR-008.
+// No package in this tree imports a concrete Kafka driver — producers and
+// consumers wire themselves at startup and reference these constants only.
 package kafka
 
+// Topic name constants — single source of truth for string literals used
+// across the outbox consumer, Terraform data source, and topology apply CLI.
+//
+// Naming convention: gitscale.<domain>.events[.dlq]
 const (
-	// TopicIdentityEvents is the Kafka topic for the identity domain outbox.
-	TopicIdentityEvents = "gitscale.identity.events"
+	TopicIdentityEvents    = "gitscale.identity.events"
+	TopicIdentityEventsDLQ = "gitscale.identity.events.dlq"
 
-	// TopicRepositoriesEvents is the Kafka topic for the repositories domain outbox.
-	TopicRepositoriesEvents = "gitscale.repositories.events"
+	TopicRepositoriesEvents    = "gitscale.repositories.events"
+	TopicRepositoriesEventsDLQ = "gitscale.repositories.events.dlq"
 
-	// TopicCollaborationEvents is the Kafka topic for the collaboration domain outbox.
-	TopicCollaborationEvents = "gitscale.collaboration.events"
+	TopicCollaborationEvents    = "gitscale.collaboration.events"
+	TopicCollaborationEventsDLQ = "gitscale.collaboration.events.dlq"
 
-	// TopicCIEvents is the Kafka topic for the ci domain outbox.
-	TopicCIEvents = "gitscale.ci.events"
+	TopicCIEvents    = "gitscale.ci.events"
+	TopicCIEventsDLQ = "gitscale.ci.events.dlq"
 
-	// TopicBillingEvents is the Kafka topic for the billing domain outbox.
-	TopicBillingEvents = "gitscale.billing.events"
+	TopicBillingEvents    = "gitscale.billing.events"
+	TopicBillingEventsDLQ = "gitscale.billing.events.dlq"
 )
+
+// AllMainTopics lists the five domain topics (not DLQs).
+// Useful for consumers that subscribe to all domains (e.g. SearchIndexer, AuditLog).
+var AllMainTopics = []string{
+	TopicIdentityEvents,
+	TopicRepositoriesEvents,
+	TopicCollaborationEvents,
+	TopicCIEvents,
+	TopicBillingEvents,
+}

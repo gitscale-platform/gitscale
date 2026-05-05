@@ -446,12 +446,12 @@ func TestIntegration_HappyPath(t *testing.T) {
 	}
 
 	// Assert: event IDs match inserted set.
-	published := make(map[uuid.UUID]struct{}, 3)
+	published := make(map[string]struct{}, 3)
 	for _, m := range msgs {
 		published[m.EventID] = struct{}{}
 	}
 	for _, id := range inserted {
-		if _, ok := published[id]; !ok {
+		if _, ok := published[id.String()]; !ok {
 			t.Errorf("event_id %s missing from broker", id)
 		}
 	}
@@ -575,7 +575,7 @@ func TestIntegration_CrashMidBatch(t *testing.T) {
 	// be up to 8 (5 original + 3 that were "pre-published"). The set of
 	// event_ids must equal the original 5.
 	allMsgs := readAllMessages(t, brokerAddr, topic, 8, 10*time.Second)
-	uniqueIDs := make(map[uuid.UUID]struct{})
+	uniqueIDs := make(map[string]struct{})
 	for _, m := range allMsgs {
 		uniqueIDs[m.EventID] = struct{}{}
 	}
@@ -583,7 +583,7 @@ func TestIntegration_CrashMidBatch(t *testing.T) {
 		t.Errorf("expected 5 unique event_ids on broker, got %d", len(uniqueIDs))
 	}
 	for _, id := range inserted {
-		if _, ok := uniqueIDs[id]; !ok {
+		if _, ok := uniqueIDs[id.String()]; !ok {
 			t.Errorf("event_id %s missing from broker after restart", id)
 		}
 	}
@@ -676,7 +676,7 @@ func TestIntegration_TwoReplicaRace(t *testing.T) {
 	// acceptable; the test asserts no event is missed).
 	allMsgs := readAllPartitions(t, brokerAddr, topic, numPartitions, rowCount, 15*time.Second)
 
-	uniqueIDs := make(map[uuid.UUID]struct{}, rowCount)
+	uniqueIDs := make(map[string]struct{}, rowCount)
 	for _, m := range allMsgs {
 		uniqueIDs[m.EventID] = struct{}{}
 	}
@@ -698,7 +698,7 @@ func TestIntegration_TwoReplicaRace(t *testing.T) {
 		if err := rows.Scan(&id); err != nil {
 			t.Fatalf("scan: %v", err)
 		}
-		if _, ok := uniqueIDs[id]; !ok {
+		if _, ok := uniqueIDs[id.String()]; !ok {
 			t.Errorf("event_id %s from DB was never published to broker", id)
 		}
 	}

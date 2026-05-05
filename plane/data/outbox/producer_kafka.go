@@ -80,13 +80,14 @@ func (k *kafkaWriter) PublishBatch(ctx context.Context, topic string, batch []Ou
 
 	for _, row := range batch {
 		env := kafkadata.EventEnvelope{
-			EventID:       row.EventID,
+			EventID:       row.EventID.String(),
 			AggregateType: row.AggregateType,
-			AggregateID:   row.AggregateID,
+			AggregateID:   row.AggregateID.String(),
 			EventType:     row.EventType,
+			SchemaVersion: "v1",
 			Payload:       row.Payload,
+			OccurredAt:    row.CreatedAt,
 			PublishedAt:   now,
-			CreatedAt:     row.CreatedAt,
 		}
 		val, err := json.Marshal(env)
 		if err != nil {

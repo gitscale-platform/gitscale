@@ -3,39 +3,77 @@ package kafka
 import (
 	"encoding/json"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-// EventEnvelope is the wire format written to every Kafka topic fed by the
-// outbox consumer. Consumers must dedupe on EventID (ADR-008).
+// EventEnvelope is the wire format for every event published to a Kafka topic
+// by the polling outbox consumer (ADR-008).
 //
-// Subject naming: gitscale.<domain>.<aggregate>.v<N>
+// The partition key on every topic is AggregateID (ADR-004).
+// SchemaVersion refers to the payload schema version, not the topic version.
+// See plane/data/kafka/topics.yaml §versioning-policy for the topic versioning
+// contract (in-place compatible evolution; breaking changes roll to …events.v2).
 type EventEnvelope struct {
-	// EventID is the stable, globally-unique identifier for this event.
-	// Consumers dedupe on this field.
-	EventID uuid.UUID `json:"event_id"`
+	// EventID is the UUID from outbox.event_id. Consumers use this for
+	// idempotency deduplication (ADR-008).
+	EventID string `json:"event_id"`
 
-	// AggregateType is the name of the aggregate that emitted the event,
-	// e.g. "HumanUser", "Repository", "PullRequest".
+	// AggregateType names the domain aggregate, e.g. "pull_request", "repository".
 	AggregateType string `json:"aggregate_type"`
 
-	// AggregateID is the UUID of the specific aggregate instance.
-	// This is also used as the Kafka partition key (ADR-004).
-	AggregateID uuid.UUID `json:"aggregate_id"`
+	// AggregateID is the UUID of the aggregate. This is the Kafka partition key
+	// for all topics (ADR-004), preserving per-aggregate ordering.
+	AggregateID string `json:"aggregate_id"`
 
-	// EventType is the fully qualified event type name, e.g. "user.created".
+	// EventType is the dot-separated event name, e.g. "pr.opened", "repo.archived".
+	// Pattern: ^[a-z_]+\.[a-z_]+$
 	EventType string `json:"event_type"`
 
-	// Payload is the domain-specific event body, serialised as JSON.
+	// SchemaVersion is the payload schema version, e.g. "v1".
+	// Incremented only on breaking payload changes; most events remain at "v1".
+	SchemaVersion string `json:"schema_version"`
+
+	// Payload is the domain-specific event body. Shape is defined in
+	// plane/data/events/<domain>/<event_type>.schema.json.
 	Payload json.RawMessage `json:"payload"`
 
-	// PublishedAt is the wall-clock time the outbox consumer published the
-	// event to Kafka. It is not the source transaction time; use CreatedAt
-	// for causal ordering.
+	// OccurredAt is when the domain event occurred — copied from the source
+	// transaction timestamp, not from Kafka publish time. Use this for
+	// event-time ordering and reconciliation windows.
+	OccurredAt time.Time `json:"occurred_at"`
+
+	// PublishedAt is when the outbox consumer published the event to Kafka
+	// (RFC3339, UTC). Delta between OccurredAt and PublishedAt is the outbox
+	// consumer lag for this event.
 	PublishedAt time.Time `json:"published_at"`
 
-	// CreatedAt is the time the outbox row was written in the source
-	// transaction. Use this for causal ordering.
-	CreatedAt time.Time `json:"created_at"`
+	// PrincipalType identifies what kind of principal caused the event:
+	// "user", "agent", or "service". Carried from the JWT-SVID claims (ADR-010)
+	// so downstream consumers (billing, CI routing) can branch without a
+	// secondary identity lookup.
+	PrincipalType string `json:"principal_type"`
+
+	// RateBucket is the billing routing key (e.g. "agent_pro", "human_default").
+	// Carried from JWT-SVID claims (ADR-010) so BillingAggregator can route
+	// usage records without re-resolving identity.
+	RateBucket string `json:"rate_bucket"`
+}
+
+// MarshalJSON encodes the envelope to JSON bytes.
+// Provided as a helper so callers don't need to import encoding/json directly.
+func (e EventEnvelope) MarshalJSON() ([]byte, error) {
+	type alias EventEnvelope
+	b, err := json.Marshal(alias(e))
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// UnmarshalEnvelope decodes JSON bytes into an EventEnvelope.
+func UnmarshalEnvelope(data []byte) (EventEnvelope, error) {
+	var e EventEnvelope
+	if err := json.Unmarshal(data, &e); err != nil {
+		return EventEnvelope{}, err
+	}
+	return e, nil
 }

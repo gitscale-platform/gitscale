@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	kafkadata "github.com/gitscale-platform/gitscale/plane/data/kafka"
-	"github.com/google/uuid"
 )
 
 // MockProducer is an in-memory KafkaProducer implementation for unit tests.
@@ -83,10 +82,10 @@ func (m *MockProducer) Messages(topic string) []kafkadata.EventEnvelope {
 }
 
 // EventIDs returns the set of event_ids published to topic.
-func (m *MockProducer) EventIDs(topic string) map[uuid.UUID]struct{} {
+func (m *MockProducer) EventIDs(topic string) map[string]struct{} {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make(map[uuid.UUID]struct{}, len(m.messages[topic]))
+	out := make(map[string]struct{}, len(m.messages[topic]))
 	for _, env := range m.messages[topic] {
 		out[env.EventID] = struct{}{}
 	}
@@ -102,12 +101,13 @@ func (m *MockProducer) IsClosed() bool {
 
 func (m *MockProducer) appendLocked(topic string, row OutboxRow) {
 	env := kafkadata.EventEnvelope{
-		EventID:       row.EventID,
+		EventID:       row.EventID.String(),
 		AggregateType: row.AggregateType,
-		AggregateID:   row.AggregateID,
+		AggregateID:   row.AggregateID.String(),
 		EventType:     row.EventType,
+		SchemaVersion: "v1",
 		Payload:       json.RawMessage(row.Payload),
-		CreatedAt:     row.CreatedAt,
+		OccurredAt:    row.CreatedAt,
 	}
 	m.messages[topic] = append(m.messages[topic], env)
 }

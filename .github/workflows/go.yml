@@ -13,7 +13,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.23"
           cache: true
 
       - name: Build
@@ -29,9 +29,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.23"
           cache: false
 
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.63
+          version: v1.64
