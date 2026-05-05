@@ -128,6 +128,7 @@ func WithNamespace(inner CacheStore, env string) CacheStore {
 ```
 
 Construction in main:
+
 ```go
 raw := cache.NewRedisStore(cfg.RedisURL)
 store := cache.WithNamespace(raw, cfg.Env)  // "gitscale:prod:repo:loc:abc-123"
