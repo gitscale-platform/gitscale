@@ -1,0 +1,169 @@
+# Schema version: 1
+# Versioning policy: bump schema version when adding/removing/renaming topics
+# or changing partition count, replication factor, or key strategy.
+# Breaking changes require an ADR amendment.
+#
+# Kafka is operational-only; ClickHouse is the durable audit store (ADR-008).
+# Do NOT rely on Kafka retention for reconciliation or compliance storage.
+#
+# Per ADR-004: partition key is aggregate_id (UUID) for all topics.
+# Per ADR-008: events are published only by the polling outbox consumer,
+#   never by a direct application-plane Kafka producer.
+#
+# ACLs (acls:) declare producer and consumer SPIFFE IDs (ADR-010).
+# Full Terraform ACL wiring is future work; the schema is defined here so
+# tooling can enforce it once wired.
+#
+# Topic versioning policy (breaking changes):
+#   1. Bump payload schema_version in the envelope (v1 -> v2).
+#   2. Roll topic: introduce gitscale.<domain>.events.v2 with the same config.
+#   3. Dual-publish window: outbox consumer publishes to both events and events.v2
+#      using the registered downgrade function in plane/data/events/<domain>/downgrades.go.
+#   4. Consumer groups migrate to v2 at their own pace.
+#   5. Decommission v1 30 days after the last consumer migrates.
+
+defaults:
+  replication_factor: 3
+  key_field: aggregate_id
+  configs:
+    cleanup.policy: delete
+    min.insync.replicas: 2
+    compression.type: zstd
+
+topics:
+  # ── identity ──────────────────────────────────────────────────────────────
+  - name: gitscale.identity.events
+    partitions: 12
+    retention_ms: 604800000          # 7 days
+    key_field: aggregate_id
+    rationale: >
+      User/org/agent mutations. Low volume (~100 events/sec peak). 12 partitions
+      gives ~10 events/sec per partition — generous headroom.
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+
+  - name: gitscale.identity.events.dlq
+    partitions: 1
+    retention_ms: 2592000000         # 30 days
+    key_field: aggregate_id
+    rationale: >
+      Poison messages from identity consumers. 1 partition is sufficient;
+      DLQ volume is negligible under normal operation.
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+
+  # ── repositories ──────────────────────────────────────────────────────────
+  - name: gitscale.repositories.events
+    partitions: 24
+    retention_ms: 604800000          # 7 days
+    key_field: aggregate_id
+    rationale: >
+      Repo metadata mutations. Push events drive ~½ collaboration volume.
+      Peak ~8,000 events/sec; 24 partitions => ~330 events/sec per partition (~330 KB/s).
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+        - spiffe://gitscale.dev/ns/data/sa/webhook-fanout
+        - spiffe://gitscale.dev/ns/data/sa/cold-storage-migrator
+
+  - name: gitscale.repositories.events.dlq
+    partitions: 1
+    retention_ms: 2592000000         # 30 days
+    key_field: aggregate_id
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+        - spiffe://gitscale.dev/ns/data/sa/webhook-fanout
+        - spiffe://gitscale.dev/ns/data/sa/cold-storage-migrator
+
+  # ── collaboration ──────────────────────────────────────────────────────────
+  - name: gitscale.collaboration.events
+    partitions: 48
+    retention_ms: 604800000          # 7 days
+    key_field: aggregate_id
+    rationale: >
+      PR/issue/comment events. Highest write volume — agent-driven.
+      ~100 events/min/session × 1K active sessions × 10× burst => ~16,000 events/sec peak.
+      48 partitions => ~330 events/sec per partition. Powers-of-2 multiple of 12
+      for clean rebalancing if partition count is ever increased.
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+        - spiffe://gitscale.dev/ns/data/sa/webhook-fanout
+
+  - name: gitscale.collaboration.events.dlq
+    partitions: 1
+    retention_ms: 2592000000         # 30 days
+    key_field: aggregate_id
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+        - spiffe://gitscale.dev/ns/data/sa/webhook-fanout
+
+  # ── ci ────────────────────────────────────────────────────────────────────
+  - name: gitscale.ci.events
+    partitions: 24
+    retention_ms: 604800000          # 7 days
+    key_field: aggregate_id
+    rationale: >
+      Workflow + per-job state transitions. ~20 events per pipeline ×
+      1K pipelines/min × burst => ~5,000 events/sec peak.
+      24 partitions => ~210 events/sec per partition.
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+        - spiffe://gitscale.dev/ns/data/sa/webhook-fanout
+
+  - name: gitscale.ci.events.dlq
+    partitions: 1
+    retention_ms: 2592000000         # 30 days
+    key_field: aggregate_id
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/search-indexer
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+        - spiffe://gitscale.dev/ns/data/sa/webhook-fanout
+
+  # ── billing ───────────────────────────────────────────────────────────────
+  - name: gitscale.billing.events
+    partitions: 12
+    retention_ms: 604800000          # 7 days — Kafka is operational-only.
+    key_field: aggregate_id
+    rationale: >
+      Usage events trail every metered operation. ~3,000 events/sec peak;
+      12 partitions => ~250 events/sec per partition.
+      Retention is 7 days (operational window only). ClickHouse is the
+      durable audit and reconciliation store (ADR-008); do not extend
+      Kafka retention for compliance purposes.
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/billing-aggregator
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+
+  - name: gitscale.billing.events.dlq
+    partitions: 1
+    retention_ms: 2592000000         # 30 days
+    key_field: aggregate_id
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/billing-aggregator
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
