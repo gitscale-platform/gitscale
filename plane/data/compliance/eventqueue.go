@@ -6,7 +6,6 @@ package compliance
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -76,10 +75,6 @@ func RunKafkaProducerCompliance(t *testing.T, topic string, factory KafkaProduce
 		err := prod.PublishBatch(ctx, topic, []outbox.OutboxRow{row})
 		if err == nil {
 			t.Fatal("expected error on cancelled context, got nil")
-		}
-		if !errors.Is(err, context.Canceled) {
-			// Allow wrapped errors — the implementation may wrap context.Canceled.
-			// We just assert it's non-nil, which we already checked above.
 		}
 	})
 
