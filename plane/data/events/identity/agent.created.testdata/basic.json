@@ -1,0 +1,14 @@
+{
+  "agent_id": "01931a4b-9c10-7000-8000-000000000002",
+  "parent_user_id": "01931a4b-9c10-7000-8000-000000000001",
+  "display_name": "code-reviewer",
+  "permission_scope": ["repo:read", "issue:write"],
+  "rate_bucket": "agent_default",
+  "session_quota": 4,
+  "tokens_per_week_cap": 100000000,
+  "reputation_score": 0.5,
+  "quota_account_id": null,
+  "principal_class": "agent",
+  "created_at": "2026-05-06T12:34:56.789012Z",
+  "_envelope_version": 1
+}

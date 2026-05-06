@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/identity/user.created.schema.json",
+  "title": "user.created",
+  "description": "Emitted when a HumanUser row is inserted. Payload of the identity_outbox row whose event_type = 'user.created'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "user_id",
+    "email",
+    "rate_bucket",
+    "principal_class",
+    "created_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "email": {
+      "type": "string",
+      "minLength": 3
+    },
+    "rate_bucket": {
+      "type": "string"
+    },
+    "quota_account_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "principal_class": {
+      "type": "string",
+      "const": "user"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}

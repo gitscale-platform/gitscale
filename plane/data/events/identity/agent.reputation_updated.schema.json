@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/identity/agent.reputation_updated.schema.json",
+  "title": "agent.reputation_updated",
+  "description": "Emitted when an AgentIdentity reputation_score is set. delta = new_score - old_score, computed inside the same Tx as the write.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "old_score",
+    "new_score",
+    "delta",
+    "computed_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "old_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "new_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "delta": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}
