@@ -7,6 +7,10 @@ dist/
 vendor/
 coverage.out
 coverage.html
+__debug_bin
+*.prof
+*.trace
+tmp/
 
 # Go build cache (local dev — not committed)
 .cache/
@@ -32,10 +36,18 @@ Thumbs.db
 *.swo
 *~
 
+# Logs
+*.log
+logs/
+
 # Claude Code local overrides (personal settings, not shared)
 .claude/settings.local.json
 
 # Skill eval workspaces — local iteration artifacts, not committed
 .claude/skills/*-workspace/
 .claude/worktrees/
+.claude/ralph-loop.local.md
+docs/superpowers/runs/
+docs/superpowers/prompts/
 go.work.sum
+
