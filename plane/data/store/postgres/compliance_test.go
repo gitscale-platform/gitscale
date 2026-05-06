@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/compliance"
 	"github.com/gitscale-platform/gitscale/plane/data/store"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	pgmodule "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // TestPostgresMetadataStoreCompliance runs the ADR-017 contract suite against
@@ -28,7 +30,11 @@ func TestPostgresMetadataStoreCompliance(t *testing.T) {
 			pgmodule.WithDatabase("gitscale_test"),
 			pgmodule.WithUsername("gs"),
 			pgmodule.WithPassword("gs"),
-			testcontainers.WithWaitStrategy(pgmodule.WithWaitForReadiness()),
+			testcontainers.WithWaitStrategy(
+				wait.ForLog("database system is ready to accept connections").
+					WithOccurrence(2).
+					WithStartupTimeout(60*time.Second),
+			),
 		)
 		if err != nil {
 			t.Fatalf("start postgres container: %v", err)

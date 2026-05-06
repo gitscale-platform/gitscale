@@ -1,0 +1,9 @@
+{
+  "user_id": "01931a4b-9c10-7000-8000-000000000001",
+  "email": "alice@example.com",
+  "rate_bucket": "human_default",
+  "quota_account_id": null,
+  "principal_class": "user",
+  "created_at": "2026-05-06T12:34:56.789012Z",
+  "_envelope_version": 1
+}

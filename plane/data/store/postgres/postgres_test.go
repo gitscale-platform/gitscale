@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	pgmodule "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func setupPostgres(t *testing.T) *pgxpool.Pool {
@@ -27,7 +28,11 @@ func setupPostgres(t *testing.T) *pgxpool.Pool {
 		pgmodule.WithDatabase("gitscale_test"),
 		pgmodule.WithUsername("gs"),
 		pgmodule.WithPassword("gs"),
-		testcontainers.WithWaitStrategy(pgmodule.WithWaitForReadiness()),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60*time.Second),
+		),
 	)
 	if err != nil {
 		t.Fatalf("start postgres container: %v", err)
