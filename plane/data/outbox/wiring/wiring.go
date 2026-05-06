@@ -9,12 +9,13 @@ import (
 
 	kafkadata "github.com/gitscale-platform/gitscale/plane/data/kafka"
 	"github.com/gitscale-platform/gitscale/plane/data/outbox"
+	"github.com/gitscale-platform/gitscale/plane/data/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // DomainConfig maps one domain's table and topic names to a consumer config.
 type DomainConfig struct {
-	Domain string
+	Domain store.Domain
 	Table  string
 	Topic  string
 }
@@ -23,28 +24,28 @@ type DomainConfig struct {
 // their corresponding outbox tables and Kafka topics.
 var AllDomains = []DomainConfig{
 	{
-		Domain: "identity",
-		Table:  "identity.identity_outbox",
+		Domain: store.DomainIdentity,
+		Table:  store.DomainIdentity.OutboxTable(),
 		Topic:  kafkadata.TopicIdentityEvents,
 	},
 	{
-		Domain: "repositories",
-		Table:  "repositories.repositories_outbox",
+		Domain: store.DomainRepositories,
+		Table:  store.DomainRepositories.OutboxTable(),
 		Topic:  kafkadata.TopicRepositoriesEvents,
 	},
 	{
-		Domain: "collaboration",
-		Table:  "collaboration.collaboration_outbox",
+		Domain: store.DomainCollaboration,
+		Table:  store.DomainCollaboration.OutboxTable(),
 		Topic:  kafkadata.TopicCollaborationEvents,
 	},
 	{
-		Domain: "ci",
-		Table:  "ci.ci_outbox",
+		Domain: store.DomainCI,
+		Table:  store.DomainCI.OutboxTable(),
 		Topic:  kafkadata.TopicCIEvents,
 	},
 	{
-		Domain: "billing",
-		Table:  "billing.billing_outbox",
+		Domain: store.DomainBilling,
+		Table:  store.DomainBilling.OutboxTable(),
 		Topic:  kafkadata.TopicBillingEvents,
 	},
 }
@@ -70,7 +71,7 @@ func StartAll(
 
 	for _, d := range domains {
 		cfg := outbox.Config{
-			Domain:   d.Domain,
+			Domain:   string(d.Domain),
 			Table:    d.Table,
 			Topic:    d.Topic,
 			DB:       db,
