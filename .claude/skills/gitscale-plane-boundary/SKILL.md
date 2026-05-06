@@ -36,6 +36,8 @@ Trigger on **any** of:
 
 `plane/<X>/api/` is the only published surface of plane X. Treat it as a stable contract. Everything under `plane/<X>/internal/` is private.
 
+**Workflow-plane write rule (ADR-019).** Temporal activity files (`activity*.go` in `plane/workflow/`) may not call `MetadataStore.Transact` or `WriteOutbox` for domain state mutations. State-mutating activities must call `plane/workflow/appclient/<domain>` over gRPC, which routes the write through the application plane. Exception: pure-DDL activities (e.g. `CreatePartition`) that emit no outbox row may use `MetadataStore` directly. Read-only activities may use `plane/data/store` interfaces directly.
+
 ## Workflow
 
 1. **Scan the diff** for `import` statements added or modified.

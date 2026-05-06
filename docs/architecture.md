@@ -529,7 +529,7 @@ Consequences: <positive, negative, follow-ups>
 - **Date:** TBD
 - **Context:** State changes must be observable by search, webhooks, billing, and audit consumers without dual-writes that risk divergence between the DB and the event bus. The publisher must be portable across metadata-store engines (per ADR-006) without coupling the application code to engine-specific CDC.
 - **Decision:** State-mutating SQL transactions write the source change AND an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT … WHERE processed = false ORDER BY created_at LIMIT N` loop) drains each outbox table and publishes to Kafka with idempotent producer config. Outbox rows TTL-expire 24 h after the consumer high-water mark advances past them. Consumers must be idempotent on `event_id`.
-- **Consequences:** No dual-write race. Publish latency bounded by poll interval (default 1s; tunable). At-least-once delivery contract; consumers carry the idempotency burden. Logical replication or engine-native CDC is the upgrade path if poll latency becomes a constraint, swappable behind the same `EventQueue` interface.
+- **Consequences:** No dual-write race. Publish latency bounded by poll interval (default 1s; tunable). At-least-once delivery contract; consumers carry the idempotency burden. Logical replication or engine-native CDC is the upgrade path if poll latency becomes a constraint, swappable behind the same `EventQueue` interface. See ADR-019 for the workflow-plane variant of this invariant.
 
 ### ADR-009: Adopted Redis for the rate-limit and identity cache
 
@@ -640,7 +640,7 @@ Consequences: <positive, negative, follow-ups>
 - **Date:** TBD
 - **Context:** ADR-006 chose PostgreSQL and ADR-009 chose Redis as the concrete backend implementations. Future deployments may need to swap these for alternative engines without changing application code. A defined interface boundary also enables compliance testing — all implementations can be verified against the same test suite before production use.
 - **Decision:** Three Go interfaces are defined in `plane/data/`: `MetadataStore` (all SQL operations across the five schema domains), `CacheStore` (key-value, pub/sub, and TTL semantics needed by the edge and Git proxy), and `EventQueue` (outbox-to-Kafka publishing). Application code never imports a concrete driver; it receives a concrete implementation injected at startup. Every implementation must pass the shared compliance test suite in `plane/data/compliance/`.
-- **Consequences:** Alternative backend implementations slot in without touching call sites. Passing the compliance suite is the production-readiness bar for any implementation. The interface boundary also makes unit testing tractable: a conforming in-memory stub suffices for tests that do not need production semantics.
+- **Consequences:** Alternative backend implementations slot in without touching call sites. Passing the compliance suite is the production-readiness bar for any implementation. The interface boundary also makes unit testing tractable: a conforming in-memory stub suffices for tests that do not need production semantics. Workflow-plane consumers of these interfaces follow ADR-019 routing.
 - **Amendment 2026-05-06 — EventQueue naming reconciliation.** The `EventQueue` swap surface named in the original decision is implemented by `plane/data/outbox.KafkaProducer`. The matching compliance suite lives at `plane/data/compliance/eventqueue.go`. Application code references `outbox.KafkaProducer` at injection sites; the compliance contract enforces the swap-surface invariant. The name `EventQueue` is preserved in ADR text for conceptual clarity; the Go type is `KafkaProducer`.
 
 ### ADR-018: Adopted analytics-lake archival for billing `usage_events` (separate bucket, Parquet+zstd, S3 lifecycle, platform-KEK with per-month DEK)
@@ -665,6 +665,21 @@ Consequences: <positive, negative, follow-ups>
   **Cross-org dedup.** Not applicable. `usage_events.external_event_id UNIQUE` guarantees row uniqueness; there is no dedup decision to make.
 
 - **Consequences:** Audit and reconciliation queries are SQL-native via Athena/Trino without restore. Storage cost is ~95% lower at year 2+ vs always-on PG. Crypto-shred preserves post-retention erasure guarantees. The decision is decoupled from ADR-002 (Git cold tier): the two cold tiers can evolve independently. `RestorePartition` capability is acknowledged but deferred. The shape locks in for 7 years of data — schema evolution must be backwards-compatible at the Parquet level (Parquet supports column-add gracefully; column-rename or column-drop is a breaking change and requires a v2 directory).
+
+### ADR-019: Adopted application-plane RPC as the only state-mutation path from the workflow plane
+
+- **Status:** Proposed
+- **Date:** 2026-05-06
+- **Context:** Temporal workflows in `plane/workflow/` need to mutate metadata-layer state — partition rollover, agent-session lifecycle, CI pipeline state transitions, future automated remediation. Two architectural paths exist: (1) direct path — workflow activities receive `plane/data/store.MetadataStore` and call `Transact` + `WriteOutbox` themselves; (2) app-plane RPC path — workflow activities receive a thin gRPC client (`plane/workflow/appclient/`) into the application plane's per-domain service, which performs the Tx + outbox write. The direct path is technically permitted by the existing interfaces; ADR-008 is preserved either way. The choice is not about transactional integrity; it is about where domain invariants live.
+- **Decision:**
+
+  Workflow plane state mutations route exclusively via per-domain gRPC services in `plane/workflow/appclient/` → `plane/application/<domain>/`. The direct path (workflow activities calling `MetadataStore.Transact` for writes) is forbidden.
+
+  Workflow plane reads MAY use `plane/data/store` interfaces directly via the activity adapter. Pure-DDL maintenance activities (e.g. partition rollover) MAY use `MetadataStore` directly, because the operation has no outbox row and no domain invariant.
+
+  No workflow activity writes more than one domain's outbox row in a single execution. Cross-domain workflows compose per-domain saga steps with explicit compensation activities.
+
+- **Consequences:** Domain invariants live in the application plane only. Auth and audit context is uniform — the application plane stamps `actor_id`, `principal_kind`, `rate_bucket` on every outbox payload; a workflow activity has no human principal and routes through the app plane for a clear audit trail (`actor_kind=service`). Single-writer per aggregate keeps schema migrations sane. Workflow tests gain a clean stub surface. Latency cost: one network hop per write activity (acceptable; Temporal activities are async and retry-tolerant). Pure-DDL exception is narrow: `CreatePartition` writes no row, emits no outbox, has no invariant. Cross-domain saga rule prevents distributed-Tx patterns: two-phase commit across domain outbox tables is forbidden; cross-domain workflows compose per-domain saga steps with explicit compensation.
 
 ---
 
