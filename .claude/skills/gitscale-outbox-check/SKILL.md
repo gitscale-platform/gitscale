@@ -9,6 +9,8 @@ description: Use when adding or modifying SQL writes (INSERT, UPDATE, DELETE) in
 
 ADR-008 binds GitScale to outbox-based event consistency. State-mutating SQL transactions write the source change AND a row to the `outbox` table in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT ... LIMIT N` loop) drains the outbox and publishes to Kafka asynchronously.
 
+**Workflow-plane variant (ADR-019).** Temporal activities in `plane/workflow/` must NOT write outbox rows directly. State-mutating activities route through the application plane's gRPC service (`plane/workflow/appclient/`), which performs the Tx + outbox write. Only the application plane writes to domain outbox tables. If you see a `WriteOutbox` call in a `plane/workflow/` activity file, flag it as an ADR-019 violation.
+
 This skill catches three failure modes:
 
 1. **Dual write** — state mutated and Kafka produced separately. One can succeed while the other fails. Forbidden.
