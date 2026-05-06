@@ -1,0 +1,149 @@
+// Package store defines the MetadataStore and Tx interfaces that abstract all
+// SQL operations across the five GitScale schema domains. Concrete
+// implementations (postgres, stub) satisfy these interfaces; application code
+// receives injected instances and never imports a driver directly (ADR-017).
+package store
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// MetadataStore is the top-level entry point for all SQL operations.
+// Implementations must be safe for concurrent use.
+type MetadataStore interface {
+	// Transact runs fn inside a serializable transaction. If fn returns a
+	// non-nil error the transaction is rolled back; otherwise it is committed.
+	// A serialization-failure (SQLSTATE 40001) is surfaced to the caller so
+	// retry logic can be applied; use IsRetryable to detect it.
+	Transact(ctx context.Context, fn func(Tx) error) error
+
+	// Identity returns a reader for the identity domain. The returned reader
+	// is usable outside a transaction for read-only queries.
+	Identity() IdentityReader
+
+	// Repositories returns a reader for the repositories domain.
+	Repositories() RepositoryReader
+}
+
+// Tx is a handle for the active transaction passed to Transact callbacks.
+// It exposes both read and write operations bounded to the transaction scope.
+type Tx interface {
+	// Identity returns the identity writer for this transaction.
+	Identity() IdentityWriter
+
+	// Repositories returns the repository writer for this transaction.
+	Repositories() RepositoryWriter
+
+	// WriteOutbox appends a row to the domain's outbox table within this
+	// transaction. The row is removed if the transaction rolls back.
+	// payload is JSON-marshalled; it must be a serialisable value.
+	WriteOutbox(
+		ctx context.Context,
+		domain Domain,
+		aggregateType string,
+		aggregateID uuid.UUID,
+		eventType string,
+		payload any,
+	) error
+}
+
+// HumanUser is the identity.human_users row model.
+type HumanUser struct {
+	ID             uuid.UUID
+	Email          string
+	CredentialHash string
+	RateBucket     string
+	QuotaAccountID *uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// AgentIdentity is the identity.agent_identities row model.
+type AgentIdentity struct {
+	ID               uuid.UUID
+	DisplayName      string
+	ParentUserID     uuid.UUID
+	PermissionScope  []string
+	RateBucket       string
+	SessionQuota     *int64
+	TokensPerWeekCap *int64
+	ReputationScore  float64
+	QuotaAccountID   *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// OrgMembership is the identity.org_memberships row model.
+type OrgMembership struct {
+	OrgID  uuid.UUID
+	UserID uuid.UUID
+	Role   string
+}
+
+// IdentityCacheEntry is the minimal projection loaded by the edge-plane
+// identity cache for principal resolution.
+type IdentityCacheEntry struct {
+	PrincipalID uuid.UUID
+	Kind        string // "human" or "agent"
+	RateBucket  string
+	QuotaID     *uuid.UUID
+}
+
+// IdentityReader exposes read-only queries against the identity domain.
+// Methods defined here may be called both inside and outside a transaction.
+type IdentityReader interface {
+	GetUserByID(ctx context.Context, id uuid.UUID) (*HumanUser, error)
+	GetUserByEmail(ctx context.Context, email string) (*HumanUser, error)
+	GetAgentByID(ctx context.Context, id uuid.UUID) (*AgentIdentity, error)
+	GetAgentsByParentUser(ctx context.Context, userID uuid.UUID) ([]AgentIdentity, error)
+	// LookupIdentityForCache returns the minimal projection used by the edge
+	// identity cache. principalID may be a HumanUser or AgentIdentity UUID.
+	LookupIdentityForCache(ctx context.Context, principalID uuid.UUID) (*IdentityCacheEntry, error)
+}
+
+// IdentityWriter exposes write operations against the identity domain.
+// All methods must be called within a Tx; they panic if used outside one.
+type IdentityWriter interface {
+	IdentityReader
+	InsertHumanUser(ctx context.Context, u HumanUser) error
+	InsertAgentIdentity(ctx context.Context, a AgentIdentity) error
+	// SetAgentReputationScore sets the score to the given value [0.0, 1.0].
+	// Clamping is enforced by the database CHECK constraint; the caller is
+	// responsible for computing the new score outside the transaction.
+	SetAgentReputationScore(ctx context.Context, agentID uuid.UUID, score float64) error
+	// DisableUser soft-disables a human user. Not implemented until #15-revocation.
+	DisableUser(ctx context.Context, userID uuid.UUID) error
+	// RevokeAgent soft-revokes an agent identity. Not implemented until #15-revocation.
+	RevokeAgent(ctx context.Context, agentID uuid.UUID) error
+	// UpdateAgentPermissions replaces the permission_scope array. Not implemented until #15-revocation.
+	UpdateAgentPermissions(ctx context.Context, agentID uuid.UUID, scope []string) error
+	AddOrgMember(ctx context.Context, m OrgMembership) error
+	RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error
+}
+
+// Repository is the repositories.repositories row model (minimal projection).
+type Repository struct {
+	ID            uuid.UUID
+	Slug          string
+	OrgID         uuid.UUID
+	ReplicaSetID  string
+	HomeRegion    string
+	CreatedAt     time.Time
+}
+
+// RepositoryReader exposes read-only queries against the repositories domain.
+type RepositoryReader interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*Repository, error)
+	GetBySlug(ctx context.Context, slug string) (*Repository, error)
+}
+
+// RepositoryWriter exposes write operations against the repositories domain.
+// Not implemented in #14; bodies return errNotImplemented.
+type RepositoryWriter interface {
+	RepositoryReader
+	Insert(ctx context.Context, r Repository) error
+	UpdatePermissions(ctx context.Context, repoID uuid.UUID, permissionHash string) error
+}
