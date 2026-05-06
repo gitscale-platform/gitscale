@@ -1,0 +1,7 @@
+{
+  // CLI options for markdownlint-cli2. Rule config goes in .markdownlint.json.
+  "ignores": [
+    ".claude/**",
+    "docs/superpowers/**"
+  ]
+}
