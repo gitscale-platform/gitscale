@@ -474,7 +474,7 @@ Consequences: <positive, negative, follow-ups>
 - **Date:** TBD
 - **Context:** CI runs untrusted agent-generated code at scale. Container-based isolation (Docker, gVisor) shares kernel surface area; one container escape can compromise neighbours and the host.
 - **Decision:** Every CI job runs in a Firecracker microVM with its own kernel and ephemeral filesystem, destroyed after job completion. Egress is restricted to a declared allowlist; credentials are short-lived and repo-scoped.
-- **Consequences:** Hardware boundary against untrusted code. Sub-second boot keeps interactive CI tractable. Operationally heavier than containers; offset by the security floor it establishes. Docker creep alongside Firecracker is forbidden — see `.claude/skills/gitscale-firecracker-isolation/`.
+- **Consequences:** Hardware boundary against untrusted code. Sub-second boot keeps interactive CI tractable. Operationally heavier than containers; offset by the security floor it establishes. Docker creep alongside Firecracker is forbidden — see `.claude/skills/gitscale-firecracker-isolation/`. For operational-analytics archives (e.g. billing.usage_events), see ADR-018.
 
 ### ADR-003: Adopted Temporal for workflow orchestration
 
@@ -592,7 +592,7 @@ Consequences: <positive, negative, follow-ups>
 - **Date:** TBD
 - **Context:** Cold-tier (10,4) EC drives ~93% storage cost savings, but naive content-addressed dedup across orgs enables a confirmation-of-file attack: an adversary who suspects an org holds a specific blob can confirm it by uploading the same content and observing dedup behaviour. A self-hosted deployment may host multiple orgs, and per-org confidentiality must hold regardless of tenancy model.
 - **Decision:** Each org has a master key in HashiCorp Vault. Per-repo DEKs are derived from the org master and used to encrypt object content before EC sharding. Object content keys are derived as `HKDF(DEK, object_hash_within_repo)`. Dedup applies within-repo always; within-org across repos behind a feature flag; cross-org never. EC stripes are per-org. Whole-repo deletion is implemented as crypto-shredding the per-repo DEK (O(1) logical deletion).
-- **Consequences:** Confirmation-of-file attack structurally impossible across orgs. Right-to-erasure path is fast. Marginal storage overhead for very small orgs is acceptable cost-of-isolation.
+- **Consequences:** Confirmation-of-file attack structurally impossible across orgs. Right-to-erasure path is fast. Marginal storage overhead for very small orgs is acceptable cost-of-isolation. Billing archive encryption follows a different KEK scope per ADR-018.
 
 ### ADR-012: Adopted Git-RPC metering at the Gitaly hook layer with two-tier counters
 
@@ -642,6 +642,29 @@ Consequences: <positive, negative, follow-ups>
 - **Decision:** Three Go interfaces are defined in `plane/data/`: `MetadataStore` (all SQL operations across the five schema domains), `CacheStore` (key-value, pub/sub, and TTL semantics needed by the edge and Git proxy), and `EventQueue` (outbox-to-Kafka publishing). Application code never imports a concrete driver; it receives a concrete implementation injected at startup. Every implementation must pass the shared compliance test suite in `plane/data/compliance/`.
 - **Consequences:** Alternative backend implementations slot in without touching call sites. Passing the compliance suite is the production-readiness bar for any implementation. The interface boundary also makes unit testing tractable: a conforming in-memory stub suffices for tests that do not need production semantics.
 - **Amendment 2026-05-06 — EventQueue naming reconciliation.** The `EventQueue` swap surface named in the original decision is implemented by `plane/data/outbox.KafkaProducer`. The matching compliance suite lives at `plane/data/compliance/eventqueue.go`. Application code references `outbox.KafkaProducer` at injection sites; the compliance contract enforces the swap-surface invariant. The name `EventQueue` is preserved in ADR text for conceptual clarity; the Go type is `KafkaProducer`.
+
+### ADR-018: Adopted analytics-lake archival for billing `usage_events` (separate bucket, Parquet+zstd, S3 lifecycle, platform-KEK with per-month DEK)
+
+- **Status:** Proposed
+- **Date:** 2026-05-06
+- **Context:** `billing.usage_events` is a high-volume, append-only operational-analytics table partitioned monthly in PostgreSQL. After the hot retention horizon, partitions must be archived in a queryable, durable, encrypted, retention-managed format. ADR-002's Git cold-tier shape (per-org encryption, EC striping) is a poor fit: usage_events span all orgs in a single time window, reads are broad scans rather than small random reads, and the data set is small relative to Git cold storage.
+- **Decision:**
+
+  **Storage target.** Separate S3-compatible bucket `gitscale-analytics-${env}` distinct from the Git cold-tier bucket. Hive-partitioned layout `billing/usage_events/year=YYYY/month=MM/usage_events_YYYY_MM.parquet`, plus matching `.manifest.json` and `.checksum.sha256` siblings.
+
+  **Format.** Parquet with zstd compression. Schema embedded; one file per source PG partition. Writer is the `DetachAndArchivePartition` activity in the billing partition rollover workflow (#18-archive).
+
+  **Durability.** S3 standard 3× replication for ≤90 days, lifecycle-transitioned to Glacier Instant Retrieval 90d–2y, Glacier Deep Archive 2y–7y, expired at 7y+30d. No project-managed erasure coding; S3 native durability suffices for this workload's read profile.
+
+  **Hot retention.** 18 months in PG (active + reconciliation overlap), then archive. Total retention 7 years from partition creation; aligned with US tax / SOC2 / industry billing-audit floors.
+
+  **Query path.** Athena (AWS) or Trino (multi-cloud) is the primary analyst query path. Glue Data Catalog (or Hive metastore) is updated by the archive activity after each upload. DuckDB-on-laptop is an acceptable fallback for ad-hoc work. A separate `RestorePartition` Temporal workflow handles dispute investigations that require SQL parity with live PG (out of scope for #18-archive; deferred).
+
+  **Encryption.** Platform-level KEK in HashiCorp Vault. Per-month DEK derived as `HKDF(platform_billing_master, "year-month")`. Each Parquet file is encrypted with one DEK use. Crypto-shred semantics preserved for post-7y deletion: destroying the month's DEK renders the corresponding archive unrecoverable. ADR-011's per-org encryption pattern is intentionally NOT applied here — usage_events span orgs in a single time window, and per-org files would explode cardinality and break Athena partition pruning.
+
+  **Cross-org dedup.** Not applicable. `usage_events.external_event_id UNIQUE` guarantees row uniqueness; there is no dedup decision to make.
+
+- **Consequences:** Audit and reconciliation queries are SQL-native via Athena/Trino without restore. Storage cost is ~95% lower at year 2+ vs always-on PG. Crypto-shred preserves post-retention erasure guarantees. The decision is decoupled from ADR-002 (Git cold tier): the two cold tiers can evolve independently. `RestorePartition` capability is acknowledged but deferred. The shape locks in for 7 years of data — schema evolution must be backwards-compatible at the Parquet level (Parquet supports column-add gracefully; column-rename or column-drop is a breaking change and requires a v2 directory).
 
 ---
 
