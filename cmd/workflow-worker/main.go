@@ -29,8 +29,11 @@ import (
 	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/cache"
+	billingstore "github.com/gitscale-platform/gitscale/plane/data/store/billing"
 	gswf "github.com/gitscale-platform/gitscale/plane/workflow"
+	"github.com/gitscale-platform/gitscale/plane/workflow/billing"
 	"github.com/gitscale-platform/gitscale/plane/workflow/canary"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -83,6 +86,38 @@ func run(logger *slog.Logger) error {
 	})
 
 	canary.Bundle(cacheStore).Apply(workerRegistrar{w})
+
+	// billing.Bundle is opt-in: only wire when POSTGRES_URL is set so dev
+	// boots succeed without a postgres dependency. In prod the env is
+	// always populated by the deploy template.
+	pgURL := os.Getenv("POSTGRES_URL")
+	if pgURL != "" {
+		ctxBoot, cancelBoot := context.WithTimeout(context.Background(), 10*time.Second)
+		pool, err := pgxpool.New(ctxBoot, pgURL)
+		cancelBoot()
+		if err != nil {
+			return fmt.Errorf("pgxpool.New: %w", err)
+		}
+		defer pool.Close()
+
+		partActivity, err := billing.NewCreatePartitionActivity(billingstore.NewPostgresPartitioner(pool))
+		if err != nil {
+			return fmt.Errorf("billing.NewCreatePartitionActivity: %w", err)
+		}
+		billing.Bundle(partActivity).Apply(workerRegistrar{w})
+
+		// Register / converge the monthly rollover schedule.
+		ctxSched, cancelSched := context.WithTimeout(context.Background(), 10*time.Second)
+		_, err = billing.EnsureRolloverSchedule(ctxSched, c.ScheduleClient())
+		cancelSched()
+		if err != nil {
+			return fmt.Errorf("billing.EnsureRolloverSchedule: %w", err)
+		}
+		logger.Info("billing partition-rollover registered",
+			"schedule_id", billing.ScheduleID, "cron", billing.CronExpression)
+	} else {
+		logger.Info("POSTGRES_URL unset; skipping billing.Bundle + rollover schedule")
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
