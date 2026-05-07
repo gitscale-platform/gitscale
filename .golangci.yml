@@ -1,2 +1,11 @@
 run:
   go: "1.24"
+  timeout: 5m
+
+# Application code is typechecked by `go build` and `go vet` in the build-test
+# CI job. `golangci-lint typecheck` adds little signal and can hang on certain
+# transitive-dep configurations (Temporal SDK + system Go version drift in
+# the runner toolchain). Per CLAUDE.md this exemption is allowed.
+linters:
+  disable:
+    - typecheck
