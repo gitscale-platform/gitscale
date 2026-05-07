@@ -13,8 +13,19 @@ type Bundle struct {
 	TaskQueue string
 	// Workflows are workflow funcs (or struct-method pairs).
 	Workflows []any
-	// Activities are activity funcs (or struct-method pairs).
+	// Activities are activity funcs (or struct-method pairs). An entry that
+	// is a NamedActivity is registered with an explicit name; bare entries
+	// use the SDK's reflection-derived default name.
 	Activities []any
+}
+
+// NamedActivity wraps an activity function so it can be registered with an
+// explicit name. Bundles that need stable activity dispatch by string name
+// (so workflow tests can dispatch without holding a reference to a specific
+// activity instance) wrap their activity in NamedActivity.
+type NamedActivity struct {
+	Name     string
+	Activity any
 }
 
 // Registrar is the minimal Temporal-worker interface the Bundle.Apply method
