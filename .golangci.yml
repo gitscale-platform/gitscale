@@ -2,3 +2,7 @@ version: "2"
 
 run:
   go: "1.24"
+
+issues:
+  exclude-files:
+    - "internal/proto/.*\\.pb\\.go$"
