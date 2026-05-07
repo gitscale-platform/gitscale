@@ -82,24 +82,38 @@ script at `lint/testdata/bad/` (must fail) and `lint/testdata/good/`
 Escape hatches: `workflow.SideEffect` and `workflow.MutableSideEffect` for
 sources of non-determinism that must be captured into history.
 
-## What ships in this PR vs. follow-ups
+## Surface
 
-This PR (#33) ships the structure that does not depend on the Temporal SDK:
+The plane shipped in two PRs to confine the Temporal SDK dep upgrade:
 
-- task-queue constants (`queues.go`)
-- bundle registry (`registry.go`) with a `Registrar` interface satisfied by
-  `*worker.Worker` once the SDK is wired in
-- determinism rules + lint script + Makefile target + CI job + testdata
-  fixtures
-- this README
+**Phase A (#56)** — Go-stdlib-only scaffolding: `queues.go`, `registry.go`,
+determinism rules + lint script + CI job, testdata fixtures.
 
-The Temporal SDK wiring — `cmd/workflow-worker/main.go`, OTel interceptor,
-worker options pinning, `EnsureSchedule` helper, `DefaultRetryPolicy`,
-`ShouldContinueAsNew`, `appclient.IdentityClient` interface, canary
-workflow + integration test — ships in a follow-up issue. The split keeps
-this PR reviewable and unblocks #18-rollover (which uses the queue
-constants and bundle registration model from here) without bringing in
-the full Temporal dep tree.
+**Phase B (#33-B)** — Temporal SDK integration:
+
+- `DefaultRetryPolicy()` (`retrypolicy.go`) — 5 attempts, 1s→60s backoff;
+  every activity inherits this unless its `ActivityOptions` override.
+- `ShouldContinueAsNew(ctx)` (`continueasnew.go`) — caps a single run's
+  history at 50000 events; long-lived workflows must check this in their
+  loop and `workflow.NewContinueAsNewError` when true.
+- `NamedActivity` extension to `Bundle` so activities can register with an
+  explicit string name; workflows dispatch by name without holding a
+  reference to the activity instance.
+- `cmd/workflow-worker/main.go` — env-driven Temporal client, worker options
+  pinned per spec D8 (max activities, poller counts, stop timeout),
+  SIGTERM-trapped graceful shutdown.
+- `appclient/` — `IdentityClient` interface + stub impl. The gRPC impl
+  ships in #15-revocation under `appclient/identity_grpc.go`.
+- `canary/` — minimal workflow + read-only activity that the worker boots
+  with. Integration test uses `go.temporal.io/sdk/testsuite` (no real
+  Temporal server needed in CI).
+
+Deferred to a separate follow-up issue:
+
+- OTel interceptor + resource attributes (spec D7).
+- `EnsureSchedule` helper for Temporal Schedule API (spec D6).
+- `docker-compose.yml` Temporal dev-server entry + `.env.example`.
+- Full schedule integration once #18-rollover lands.
 
 ## Cross-references
 
