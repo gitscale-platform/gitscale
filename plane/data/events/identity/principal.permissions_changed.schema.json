@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/identity/principal.permissions_changed.schema.json",
+  "title": "principal.permissions_changed",
+  "description": "Emitted when an agent's permission_scope is replaced. Payload of the identity_outbox row whose event_type = 'principal.permissions_changed'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "old_scope",
+    "new_scope",
+    "affected_principal_ids",
+    "changed_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "agent_id": { "type": "string", "format": "uuid" },
+    "old_scope": { "type": "array", "items": { "type": "string" } },
+    "new_scope": { "type": "array", "items": { "type": "string" } },
+    "affected_principal_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "changed_at": { "type": "string", "format": "date-time" },
+    "_envelope_version": { "type": "integer", "const": 1 }
+  }
+}

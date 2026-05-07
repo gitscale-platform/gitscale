@@ -58,6 +58,7 @@ func setupPostgres(t *testing.T) *pgxpool.Pool {
 	for _, f := range []string{
 		"000_init.sql", "001_identity.sql", "002_repositories.sql",
 		"003_collaboration.sql", "004_ci.sql", "005_billing.sql",
+		"006_identity_revocation.sql",
 	} {
 		sql, err := os.ReadFile(filepath.Join(migrationsDir, f))
 		if err != nil {
@@ -292,23 +293,174 @@ func TestPostgresService_unknownAgent_returnsErrAgentNotFound(t *testing.T) {
 	}
 }
 
-func TestPostgresService_revocationMethods_returnNotImplemented(t *testing.T) {
+func TestPostgresService_DisableUser_writesRowAndOutbox(t *testing.T) {
 	pool := setupPostgres(t)
 	ms := pgstore.New(pool)
 	svc := identity.NewPostgresService(ms)
 	ctx := context.Background()
 
-	tests := map[string]error{
-		"DisableUser":      svc.DisableUser(ctx, uuid.New(), "x"),
-		"RevokeAgent":      svc.RevokeAgent(ctx, uuid.New(), "x"),
-		"UpdateAgentPerms": svc.UpdateAgentPermissions(ctx, uuid.New(), []string{"r"}),
-		"AddOrgMember":     svc.AddOrgMember(ctx, uuid.New(), uuid.New(), "owner"),
-		"RemoveOrgMember":  svc.RemoveOrgMember(ctx, uuid.New(), uuid.New()),
+	u, err := svc.CreateUser(ctx, "rev1@example.com", "pw1234")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
 	}
-	for name, err := range tests {
-		if !errors.Is(err, identity.ErrNotImplemented) {
-			t.Errorf("%s: expected ErrNotImplemented, got %v", name, err)
-		}
+
+	if err := svc.DisableUser(ctx, u.ID, "compromised credential"); err != nil {
+		t.Fatalf("DisableUser: %v", err)
+	}
+
+	var disabledAt *time.Time
+	var reason *string
+	if err := pool.QueryRow(ctx,
+		`SELECT disabled_at, disable_reason FROM identity.human_users WHERE id = $1`, u.ID,
+	).Scan(&disabledAt, &reason); err != nil {
+		t.Fatalf("scan disabled_at: %v", err)
+	}
+	if disabledAt == nil || reason == nil || *reason != "compromised credential" {
+		t.Errorf("disabled_at/reason not persisted: %v / %v", disabledAt, reason)
+	}
+
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM identity.identity_outbox WHERE event_type = 'user.disabled' AND aggregate_id = $1`, u.ID,
+	).Scan(&n); err != nil || n != 1 {
+		t.Errorf("expected 1 user.disabled outbox row, got %d (err=%v)", n, err)
+	}
+
+	if err := svc.DisableUser(ctx, uuid.New(), "x"); !errors.Is(err, identity.ErrUserNotFound) {
+		t.Errorf("DisableUser missing user: expected ErrUserNotFound, got %v", err)
+	}
+}
+
+func TestPostgresService_RevokeAgent_writesRowAndOutbox(t *testing.T) {
+	pool := setupPostgres(t)
+	ms := pgstore.New(pool)
+	svc := identity.NewPostgresService(ms)
+	ctx := context.Background()
+
+	u, err := svc.CreateUser(ctx, "rev2@example.com", "pw1234")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	a, err := svc.CreateAgent(ctx, u.ID, "agent-1", []string{"repo:read"})
+	if err != nil {
+		t.Fatalf("CreateAgent: %v", err)
+	}
+
+	if err := svc.RevokeAgent(ctx, a.ID, "policy violation"); err != nil {
+		t.Fatalf("RevokeAgent: %v", err)
+	}
+
+	var revokedAt *time.Time
+	var reason *string
+	if err := pool.QueryRow(ctx,
+		`SELECT revoked_at, revoke_reason FROM identity.agent_identities WHERE id = $1`, a.ID,
+	).Scan(&revokedAt, &reason); err != nil {
+		t.Fatalf("scan revoked_at: %v", err)
+	}
+	if revokedAt == nil || reason == nil || *reason != "policy violation" {
+		t.Errorf("revoked_at/reason not persisted: %v / %v", revokedAt, reason)
+	}
+
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM identity.identity_outbox WHERE event_type = 'agent.revoked' AND aggregate_id = $1`, a.ID,
+	).Scan(&n); err != nil || n != 1 {
+		t.Errorf("expected 1 agent.revoked outbox row, got %d (err=%v)", n, err)
+	}
+
+	if err := svc.RevokeAgent(ctx, uuid.New(), "x"); !errors.Is(err, identity.ErrAgentNotFound) {
+		t.Errorf("RevokeAgent missing agent: expected ErrAgentNotFound, got %v", err)
+	}
+}
+
+func TestPostgresService_UpdateAgentPermissions_writesRowAndOutbox(t *testing.T) {
+	pool := setupPostgres(t)
+	ms := pgstore.New(pool)
+	svc := identity.NewPostgresService(ms)
+	ctx := context.Background()
+
+	u, err := svc.CreateUser(ctx, "rev3@example.com", "pw1234")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	a, err := svc.CreateAgent(ctx, u.ID, "agent-2", []string{"repo:read"})
+	if err != nil {
+		t.Fatalf("CreateAgent: %v", err)
+	}
+
+	newScope := []string{"repo:read", "issue:write"}
+	if err := svc.UpdateAgentPermissions(ctx, a.ID, newScope); err != nil {
+		t.Fatalf("UpdateAgentPermissions: %v", err)
+	}
+
+	var stored []string
+	if err := pool.QueryRow(ctx,
+		`SELECT permission_scope FROM identity.agent_identities WHERE id = $1`, a.ID,
+	).Scan(&stored); err != nil {
+		t.Fatalf("scan permission_scope: %v", err)
+	}
+	if len(stored) != 2 {
+		t.Errorf("expected 2 scopes, got %v", stored)
+	}
+
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM identity.identity_outbox WHERE event_type = 'principal.permissions_changed' AND aggregate_id = $1`, a.ID,
+	).Scan(&n); err != nil || n != 1 {
+		t.Errorf("expected 1 principal.permissions_changed outbox row, got %d (err=%v)", n, err)
+	}
+}
+
+func TestPostgresService_AddRemoveOrgMember_writesOutbox(t *testing.T) {
+	pool := setupPostgres(t)
+	ms := pgstore.New(pool)
+	svc := identity.NewPostgresService(ms)
+	ctx := context.Background()
+
+	u, err := svc.CreateUser(ctx, "rev4@example.com", "pw1234")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	orgID := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO identity.organisations (id, slug) VALUES ($1, $2)`,
+		orgID, "org-rev",
+	); err != nil {
+		t.Fatalf("insert org: %v", err)
+	}
+
+	if err := svc.AddOrgMember(ctx, orgID, u.ID, "developer"); err != nil {
+		t.Fatalf("AddOrgMember: %v", err)
+	}
+
+	var role string
+	if err := pool.QueryRow(ctx,
+		`SELECT role FROM identity.org_memberships WHERE org_id = $1 AND user_id = $2`, orgID, u.ID,
+	).Scan(&role); err != nil || role != "developer" {
+		t.Errorf("membership row: role=%s err=%v", role, err)
+	}
+
+	if err := svc.RemoveOrgMember(ctx, orgID, u.ID); err != nil {
+		t.Fatalf("RemoveOrgMember: %v", err)
+	}
+
+	var nAdd, nRem int
+	_ = pool.QueryRow(ctx,
+		`SELECT count(*) FROM identity.identity_outbox WHERE event_type = 'org.member_added' AND aggregate_id = $1`, u.ID,
+	).Scan(&nAdd)
+	_ = pool.QueryRow(ctx,
+		`SELECT count(*) FROM identity.identity_outbox WHERE event_type = 'org.member_removed' AND aggregate_id = $1`, u.ID,
+	).Scan(&nRem)
+	if nAdd != 1 || nRem != 1 {
+		t.Errorf("outbox: added=%d removed=%d", nAdd, nRem)
+	}
+
+	if err := svc.AddOrgMember(ctx, orgID, u.ID, ""); !errors.Is(err, identity.ErrEmptyRole) {
+		t.Errorf("AddOrgMember empty role: expected ErrEmptyRole, got %v", err)
+	}
+	if err := svc.AddOrgMember(ctx, orgID, uuid.New(), "developer"); !errors.Is(err, identity.ErrUserNotFound) {
+		t.Errorf("AddOrgMember missing user: expected ErrUserNotFound, got %v", err)
 	}
 }
 

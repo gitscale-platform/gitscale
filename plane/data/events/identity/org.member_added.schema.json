@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/identity/org.member_added.schema.json",
+  "title": "org.member_added",
+  "description": "Emitted when an org membership is created or its role is updated. Payload of the identity_outbox row whose event_type = 'org.member_added'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "org_id",
+    "user_id",
+    "role",
+    "affected_principal_ids",
+    "added_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "org_id": { "type": "string", "format": "uuid" },
+    "user_id": { "type": "string", "format": "uuid" },
+    "role": {
+      "type": "string",
+      "enum": ["owner", "maintainer", "developer", "reporter", "guest"]
+    },
+    "affected_principal_ids": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "added_at": { "type": "string", "format": "date-time" },
+    "_envelope_version": { "type": "integer", "const": 1 }
+  }
+}

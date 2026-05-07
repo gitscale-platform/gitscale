@@ -236,20 +236,24 @@ func TestLookupIdentityForCache_returnsCacheEntry(t *testing.T) {
 	}
 }
 
-func TestRevocationMethods_returnNotImplemented(t *testing.T) {
+func TestRevocationMethods_notFoundCases(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
-	tests := map[string]error{
-		"DisableUser":          svc.DisableUser(ctx, uuid.New(), "x"),
-		"RevokeAgent":          svc.RevokeAgent(ctx, uuid.New(), "x"),
-		"UpdateAgentPerms":     svc.UpdateAgentPermissions(ctx, uuid.New(), []string{"r"}),
-		"AddOrgMember":         svc.AddOrgMember(ctx, uuid.New(), uuid.New(), "owner"),
-		"RemoveOrgMember":      svc.RemoveOrgMember(ctx, uuid.New(), uuid.New()),
+
+	if err := svc.DisableUser(ctx, uuid.New(), "x"); !errors.Is(err, ErrUserNotFound) {
+		t.Errorf("DisableUser missing user: expected ErrUserNotFound, got %v", err)
 	}
-	for name, err := range tests {
-		if !errors.Is(err, ErrNotImplemented) {
-			t.Errorf("%s: expected ErrNotImplemented, got %v", name, err)
-		}
+	if err := svc.RevokeAgent(ctx, uuid.New(), "x"); !errors.Is(err, ErrAgentNotFound) {
+		t.Errorf("RevokeAgent missing agent: expected ErrAgentNotFound, got %v", err)
+	}
+	if err := svc.UpdateAgentPermissions(ctx, uuid.New(), []string{"r"}); !errors.Is(err, ErrAgentNotFound) {
+		t.Errorf("UpdateAgentPermissions missing agent: expected ErrAgentNotFound, got %v", err)
+	}
+	if err := svc.AddOrgMember(ctx, uuid.New(), uuid.New(), "owner"); !errors.Is(err, ErrUserNotFound) {
+		t.Errorf("AddOrgMember missing user: expected ErrUserNotFound, got %v", err)
+	}
+	if err := svc.AddOrgMember(ctx, uuid.New(), uuid.New(), ""); !errors.Is(err, ErrEmptyRole) {
+		t.Errorf("AddOrgMember empty role: expected ErrEmptyRole, got %v", err)
 	}
 }
 

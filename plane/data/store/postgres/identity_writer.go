@@ -55,16 +55,43 @@ func (w *identityWriter) SetAgentReputationScore(ctx context.Context, agentID uu
 	return nil
 }
 
-func (w *identityWriter) DisableUser(_ context.Context, _ uuid.UUID) error {
-	return errNotImplemented
+// DisableUser sets disabled_at = now() and disable_reason = reason. The caller
+// must verify the row exists in the same Tx; under SERIALIZABLE this guarantees
+// the UPDATE finds it.
+func (w *identityWriter) DisableUser(ctx context.Context, userID uuid.UUID, reason string) error {
+	const q = `
+		UPDATE identity.human_users
+		SET disabled_at = now(), disable_reason = $2, updated_at = now()
+		WHERE id = $1`
+	if _, err := w.q.Exec(ctx, q, userID, reason); err != nil {
+		return fmt.Errorf("postgres: DisableUser: %w", err)
+	}
+	return nil
 }
 
-func (w *identityWriter) RevokeAgent(_ context.Context, _ uuid.UUID) error {
-	return errNotImplemented
+func (w *identityWriter) RevokeAgent(ctx context.Context, agentID uuid.UUID, reason string) error {
+	const q = `
+		UPDATE identity.agent_identities
+		SET revoked_at = now(), revoke_reason = $2, updated_at = now()
+		WHERE id = $1`
+	if _, err := w.q.Exec(ctx, q, agentID, reason); err != nil {
+		return fmt.Errorf("postgres: RevokeAgent: %w", err)
+	}
+	return nil
 }
 
-func (w *identityWriter) UpdateAgentPermissions(_ context.Context, _ uuid.UUID, _ []string) error {
-	return errNotImplemented
+func (w *identityWriter) UpdateAgentPermissions(ctx context.Context, agentID uuid.UUID, scope []string) error {
+	const q = `
+		UPDATE identity.agent_identities
+		SET permission_scope = $2, updated_at = now()
+		WHERE id = $1`
+	if scope == nil {
+		scope = []string{}
+	}
+	if _, err := w.q.Exec(ctx, q, agentID, scope); err != nil {
+		return fmt.Errorf("postgres: UpdateAgentPermissions: %w", err)
+	}
+	return nil
 }
 
 func (w *identityWriter) AddOrgMember(ctx context.Context, m store.OrgMembership) error {

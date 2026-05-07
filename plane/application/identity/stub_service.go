@@ -148,24 +148,100 @@ func (s *stubService) SetAgentReputationScore(ctx context.Context, agentID uuid.
 	})
 }
 
-func (s *stubService) DisableUser(_ context.Context, _ uuid.UUID, _ string) error {
-	return ErrNotImplemented
+func (s *stubService) DisableUser(ctx context.Context, id uuid.UUID, reason string) error {
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			existing, err := tx.Identity().GetUserByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return ErrUserNotFound
+			}
+			if err := tx.Identity().DisableUser(ctx, id, reason); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "human_user", id,
+				EventUserDisabled, newUserDisabledPayload(id, reason, s.clock()))
+		})
+	})
 }
 
-func (s *stubService) RevokeAgent(_ context.Context, _ uuid.UUID, _ string) error {
-	return ErrNotImplemented
+func (s *stubService) RevokeAgent(ctx context.Context, id uuid.UUID, reason string) error {
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			existing, err := tx.Identity().GetAgentByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return ErrAgentNotFound
+			}
+			if err := tx.Identity().RevokeAgent(ctx, id, reason); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "agent_identity", id,
+				EventAgentRevoked, newAgentRevokedPayload(id, existing.ParentUserID, reason, s.clock()))
+		})
+	})
 }
 
-func (s *stubService) UpdateAgentPermissions(_ context.Context, _ uuid.UUID, _ []string) error {
-	return ErrNotImplemented
+func (s *stubService) UpdateAgentPermissions(ctx context.Context, id uuid.UUID, scope []string) error {
+	newScope := append([]string{}, scope...)
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			existing, err := tx.Identity().GetAgentByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return ErrAgentNotFound
+			}
+			oldScope := append([]string{}, existing.PermissionScope...)
+			if err := tx.Identity().UpdateAgentPermissions(ctx, id, newScope); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "agent_identity", id,
+				EventPrincipalPermissionsChanged,
+				newPrincipalPermissionsChangedPayload(id, oldScope, newScope, s.clock()))
+		})
+	})
 }
 
-func (s *stubService) AddOrgMember(_ context.Context, _, _ uuid.UUID, _ string) error {
-	return ErrNotImplemented
+func (s *stubService) AddOrgMember(ctx context.Context, orgID, userID uuid.UUID, role string) error {
+	if role == "" {
+		return ErrEmptyRole
+	}
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			user, err := tx.Identity().GetUserByID(ctx, userID)
+			if err != nil {
+				return err
+			}
+			if user == nil {
+				return ErrUserNotFound
+			}
+			if err := tx.Identity().AddOrgMember(ctx, store.OrgMembership{
+				OrgID: orgID, UserID: userID, Role: role,
+			}); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "org_membership", userID,
+				EventOrgMemberAdded, newOrgMemberAddedPayload(orgID, userID, role, s.clock()))
+		})
+	})
 }
 
-func (s *stubService) RemoveOrgMember(_ context.Context, _, _ uuid.UUID) error {
-	return ErrNotImplemented
+func (s *stubService) RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error {
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			if err := tx.Identity().RemoveOrgMember(ctx, orgID, userID); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "org_membership", userID,
+				EventOrgMemberRemoved, newOrgMemberRemovedPayload(orgID, userID, s.clock()))
+		})
+	})
 }
 
 // normalizeEmail lowercases + trims whitespace so reads via GetUserByEmail
