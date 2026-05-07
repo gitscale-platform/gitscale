@@ -42,9 +42,14 @@ type archiveManifest struct {
 	RowCount        int64  `json:"row_count"`
 	BytesWritten    int64  `json:"bytes_written"`
 	KEKHint         string `json:"kek_hint"`
+	EncFormat       string `json:"enc_format"`
 	ArchiveTS       string `json:"archive_ts"`
 	ChecksumAlg     string `json:"checksum_alg"`
 }
+
+// encFormatV1 identifies the chunked AES-256-GCM frame format with 4 MiB
+// plaintext chunks. RestorePartition decoders dispatch on this string.
+const encFormatV1 = "aes-256-gcm-v1-4mib"
 
 // ExportActivity streams rows from a detached partition to the object store as
 // Parquet+zstd encrypted with AES-256-GCM (chunked streaming format).
@@ -101,6 +106,8 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 		return ExportResult{}, fmt.Errorf("export: scan rows: %w", err)
 	}
 
+	partitionName := fmt.Sprintf("billing.usage_events_%04d_%02d", in.Year, in.Month)
+
 	plaintextR, plaintextW := io.Pipe()
 	rowCountCh := make(chan int64, 1)
 	writeErrCh := make(chan error, 1)
@@ -143,8 +150,13 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 	var bytesWritten int64
 	encErrCh := make(chan error, 1)
 	go func() {
+		// Chunk frame: [4-byte BE payload_len][12-byte nonce][GCM ciphertext+tag]
+		// AEAD AAD: "<partition_name>:<chunk_index>" — binds chunk to source partition
+		//   and prevents cross-file splicing. RestorePartition recomputes AAD on decode.
+		// Format identifier: "aes-256-gcm-v1-4mib" (see manifest.enc_format).
 		defer cipherW.Close()
 		buf := make([]byte, 4<<20) // 4 MiB
+		var chunkIndex uint64
 		for {
 			n, readErr := io.ReadFull(plaintextR, buf)
 			if n > 0 {
@@ -154,7 +166,9 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 					encErrCh <- rerr
 					return
 				}
-				ct := aead.Seal(nil, nonce, buf[:n], nil)
+				aad := []byte(fmt.Sprintf("%s:%d", partitionName, chunkIndex))
+				ct := aead.Seal(nil, nonce, buf[:n], aad)
+				chunkIndex++
 
 				payloadLen := uint32(len(nonce) + len(ct))
 				frame := make([]byte, 4+int(payloadLen))
@@ -185,27 +199,39 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 		"billing/usage_events/year=%04d/month=%02d/usage_events_%04d_%02d.parquet",
 		in.Year, in.Month, in.Year, in.Month,
 	)
-	uri, err := a.store.Upload(ctx, parquetKey, cipherR, -1)
-	if err != nil {
-		return ExportResult{}, fmt.Errorf("export: upload: %w", err)
-	}
+	uri, uploadErr := a.store.Upload(ctx, parquetKey, cipherR, -1)
 
-	if werr := <-writeErrCh; werr != nil {
-		return ExportResult{}, fmt.Errorf("export: parquet write: %w", werr)
-	}
-	if eerr := <-encErrCh; eerr != nil {
-		return ExportResult{}, fmt.Errorf("export: encrypt: %w", eerr)
-	}
+	// Always close pipe readers — unblocks goroutines if Upload errored mid-stream.
+	// CloseWithError on a closed pipe is a no-op.
+	_ = cipherR.CloseWithError(uploadErr)
+	_ = plaintextR.CloseWithError(uploadErr)
+
+	// Always drain — channels are buffered(1). The parquet goroutine always sends
+	// exactly once on rowCountCh and writeErrCh; the encrypt goroutine always sends
+	// exactly once on encErrCh.
+	writeErr := <-writeErrCh
+	encErr := <-encErrCh
 	rowCount := <-rowCountCh
+
+	if uploadErr != nil {
+		return ExportResult{}, fmt.Errorf("export: upload: %w", uploadErr)
+	}
+	if writeErr != nil {
+		return ExportResult{}, fmt.Errorf("export: parquet write: %w", writeErr)
+	}
+	if encErr != nil {
+		return ExportResult{}, fmt.Errorf("export: encrypt: %w", encErr)
+	}
 	sha256hex := fmt.Sprintf("%x", h.Sum(nil))
 
 	base := strings.TrimSuffix(parquetKey, ".parquet")
 	manifest := archiveManifest{
 		SchemaVersion:   1,
-		SourcePartition: fmt.Sprintf("billing.usage_events_%04d_%02d", in.Year, in.Month),
+		SourcePartition: partitionName,
 		RowCount:        rowCount,
 		BytesWritten:    bytesWritten,
 		KEKHint:         "platform-billing-v1",
+		EncFormat:       encFormatV1,
 		ArchiveTS:       time.Now().UTC().Format(time.RFC3339),
 		ChecksumAlg:     "sha256",
 	}

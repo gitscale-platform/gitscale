@@ -10,10 +10,11 @@ import (
 
 // StubArchiver is an in-memory Archiver for workflow unit tests.
 type StubArchiver struct {
-	mu       sync.Mutex
-	detached map[string]bool
-	dropped  map[string]bool
-	rows     map[string][]UsageEventRow
+	mu         sync.Mutex
+	detached   map[string]bool
+	dropped    map[string]bool
+	rows       map[string][]UsageEventRow
+	lastCursor *stubCursor
 
 	DetachFn func(year, month int) error
 	DropFn   func(year, month int) error
@@ -63,8 +64,22 @@ func (s *StubArchiver) DropUsageEventsPartition(_ context.Context, year, month i
 func (s *StubArchiver) ScanPartitionRows(_ context.Context, year, month int) (RowCursor, error) {
 	s.mu.Lock()
 	rows := append([]UsageEventRow(nil), s.rows[partitionKey(year, month)]...)
+	c := &stubCursor{rows: rows}
+	s.lastCursor = c
 	s.mu.Unlock()
-	return &stubCursor{rows: rows}, nil
+	return c, nil
+}
+
+// LastCursorCloses returns the number of times Close() was called on the most
+// recently issued stubCursor, or 0 if no cursor has been issued.
+func (s *StubArchiver) LastCursorCloses() int {
+	s.mu.Lock()
+	c := s.lastCursor
+	s.mu.Unlock()
+	if c == nil {
+		return 0
+	}
+	return c.Closes()
 }
 
 // IsDetached reports whether DetachUsageEventsPartition was called for (year, month).
@@ -85,6 +100,9 @@ type stubCursor struct {
 	rows []UsageEventRow
 	pos  int
 	cur  UsageEventRow
+
+	mu     sync.Mutex
+	closes int
 }
 
 func (c *stubCursor) Next(_ context.Context) bool {
@@ -98,7 +116,19 @@ func (c *stubCursor) Next(_ context.Context) bool {
 
 func (c *stubCursor) Row() UsageEventRow { return c.cur }
 func (c *stubCursor) Err() error         { return nil }
-func (c *stubCursor) Close() error       { return nil }
+func (c *stubCursor) Close() error {
+	c.mu.Lock()
+	c.closes++
+	c.mu.Unlock()
+	return nil
+}
+
+// Closes returns the number of times Close() has been called on this cursor.
+func (c *stubCursor) Closes() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closes
+}
 
 func partitionKey(year, month int) string {
 	return fmt.Sprintf("%04d_%02d", year, month)
