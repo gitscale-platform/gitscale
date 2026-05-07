@@ -1,0 +1,109 @@
+// Identity service gRPC surface (ADR-019). State-mutating RPCs map 1:1 onto
+// plane/application/identity.Service methods; the server performs the source
+// write + outbox row in a single MetadataStore.Transact (ADR-008).
+syntax = "proto3";
+
+package gitscale.identity.v1;
+
+option go_package = "github.com/gitscale-platform/gitscale/internal/proto/identity/v1;identityv1";
+
+// IdentityService is the only state-mutation path into the identity domain
+// from outside the application plane (ADR-019). Reads MAY also flow through
+// here when the caller is not co-located.
+service IdentityService {
+  // Reads
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc GetAgent(GetAgentRequest) returns (GetAgentResponse);
+
+  // Creates
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
+
+  // Revocation surface
+  rpc DisableUser(DisableUserRequest) returns (DisableUserResponse);
+  rpc RevokeAgent(RevokeAgentRequest) returns (RevokeAgentResponse);
+  rpc UpdateAgentPermissions(UpdateAgentPermissionsRequest) returns (UpdateAgentPermissionsResponse);
+
+  // Org membership
+  rpc AddOrgMember(AddOrgMemberRequest) returns (AddOrgMemberResponse);
+  rpc RemoveOrgMember(RemoveOrgMemberRequest) returns (RemoveOrgMemberResponse);
+}
+
+// HumanUser is the wire projection of plane/application/identity.HumanUser.
+// CredentialHash is intentionally omitted from the wire format — the gRPC
+// surface never returns hashes to clients.
+message HumanUser {
+  string id = 1;
+  string email = 2;
+  string rate_bucket = 3;
+  string quota_account_id = 4; // empty if NULL
+  bool disabled = 5;
+}
+
+// AgentIdentity is the wire projection of plane/application/identity.AgentIdentity.
+message AgentIdentity {
+  string id = 1;
+  string display_name = 2;
+  string parent_user_id = 3;
+  repeated string permission_scope = 4;
+  string rate_bucket = 5;
+  double reputation_score = 6;
+  string quota_account_id = 7; // empty if NULL
+  bool revoked = 8;
+}
+
+message GetUserRequest { string id = 1; }
+message GetUserResponse {
+  bool found = 1;
+  HumanUser user = 2;
+}
+
+message GetAgentRequest { string id = 1; }
+message GetAgentResponse {
+  bool found = 1;
+  AgentIdentity agent = 2;
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string plaintext_credential = 2;
+}
+message CreateUserResponse { HumanUser user = 1; }
+
+message CreateAgentRequest {
+  string parent_user_id = 1;
+  string display_name = 2;
+  repeated string permission_scope = 3;
+}
+message CreateAgentResponse { AgentIdentity agent = 1; }
+
+message DisableUserRequest {
+  string user_id = 1;
+  string reason = 2;
+}
+message DisableUserResponse {}
+
+message RevokeAgentRequest {
+  string agent_id = 1;
+  string reason = 2;
+}
+message RevokeAgentResponse {}
+
+message UpdateAgentPermissionsRequest {
+  string agent_id = 1;
+  repeated string permission_scope = 2;
+}
+message UpdateAgentPermissionsResponse {}
+
+message AddOrgMemberRequest {
+  string org_id = 1;
+  string user_id = 2;
+  string role = 3;
+}
+message AddOrgMemberResponse {}
+
+message RemoveOrgMemberRequest {
+  string org_id = 1;
+  string user_id = 2;
+}
+message RemoveOrgMemberResponse {}

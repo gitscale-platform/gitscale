@@ -2,3 +2,8 @@ version: "2"
 
 run:
   go: "1.24"
+
+linters:
+  exclusions:
+    paths:
+      - "internal/proto/.*\\.pb\\.go$"
