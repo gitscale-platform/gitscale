@@ -24,7 +24,6 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
 
@@ -33,11 +32,9 @@ jobs:
           go-version: "1.24"
           cache: false
 
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v9.2.0
         with:
-          version: v1.64
-          args: --timeout=5m
-          only-new-issues: true
+          version: v2.12.2
 
   lint-determinism:
     runs-on: ubuntu-latest
