@@ -1,0 +1,28 @@
+# Determinism rules for GitScale workflow code (ADR-003, spec D5).
+#
+# Each non-blank, non-comment line is a regex tested against every line of every
+# workflow*.go (or workflows/*.go) file under plane/workflow/. A match fails
+# the lint. activity*.go and *_test.go files are exempt.
+#
+# Escape hatches: workflow.SideEffect, workflow.MutableSideEffect.
+
+# Time and randomness — Temporal workflows MUST use workflow.Now(ctx),
+# workflow.NewTimer(ctx, …), workflow.SideEffect for ad-hoc sources.
+\btime\.Now\(
+\btime\.After\(
+\btime\.NewTimer\(
+\btime\.Sleep\(
+\bmath/rand\b
+\bcrypto/rand\b
+\buuid\.New\(
+\buuid\.NewV7\(
+
+# I/O and config — environment reads + network calls are activity-only.
+\bos\.Getenv\(
+\bnet/http\b
+\bnet\.[A-Z]
+
+# Concurrency primitives — sync.Mutex, sync.WaitGroup, channels, goroutines.
+\bsync\.[A-Z]
+\bgo\s+func\(
+\bmake\(chan\b
