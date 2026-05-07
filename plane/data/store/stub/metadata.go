@@ -275,16 +275,53 @@ func (w *stubIdentityWriter) SetAgentReputationScore(_ context.Context, agentID 
 	return nil
 }
 
-func (w *stubIdentityWriter) DisableUser(_ context.Context, _ uuid.UUID) error {
-	return errNotImplemented
+// DisableUser is a no-op on the stub model: HumanUser does not carry a
+// disabled_at field so the in-memory projection is unchanged. The stub still
+// participates in the outbox path so service-level event tests pass.
+func (w *stubIdentityWriter) DisableUser(_ context.Context, userID uuid.UUID, _ string) error {
+	w.tx.lazyInit()
+	w.reader.store.mu.Lock()
+	_, ok := w.reader.store.users[userID]
+	w.reader.store.mu.Unlock()
+	if !ok {
+		if _, pending := w.tx.pendingUsers[userID]; !pending {
+			return errors.New("stub: DisableUser: user not found")
+		}
+	}
+	return nil
 }
 
-func (w *stubIdentityWriter) RevokeAgent(_ context.Context, _ uuid.UUID) error {
-	return errNotImplemented
+func (w *stubIdentityWriter) RevokeAgent(_ context.Context, agentID uuid.UUID, _ string) error {
+	w.tx.lazyInit()
+	w.reader.store.mu.Lock()
+	_, ok := w.reader.store.agents[agentID]
+	w.reader.store.mu.Unlock()
+	if !ok {
+		if _, pending := w.tx.pendingAgents[agentID]; !pending {
+			return errors.New("stub: RevokeAgent: agent not found")
+		}
+	}
+	return nil
 }
 
-func (w *stubIdentityWriter) UpdateAgentPermissions(_ context.Context, _ uuid.UUID, _ []string) error {
-	return errNotImplemented
+func (w *stubIdentityWriter) UpdateAgentPermissions(_ context.Context, agentID uuid.UUID, scope []string) error {
+	w.tx.lazyInit()
+	w.reader.store.mu.Lock()
+	existing, ok := w.reader.store.agents[agentID]
+	w.reader.store.mu.Unlock()
+	if !ok {
+		if pending, p := w.tx.pendingAgents[agentID]; p {
+			cp := *pending
+			cp.PermissionScope = append([]string{}, scope...)
+			w.tx.pendingAgents[agentID] = &cp
+			return nil
+		}
+		return errors.New("stub: UpdateAgentPermissions: agent not found")
+	}
+	cp := *existing
+	cp.PermissionScope = append([]string{}, scope...)
+	w.tx.pendingAgents[agentID] = &cp
+	return nil
 }
 
 func (w *stubIdentityWriter) AddOrgMember(_ context.Context, _ store.OrgMembership) error {

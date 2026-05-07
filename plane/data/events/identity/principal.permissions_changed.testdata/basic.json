@@ -1,0 +1,8 @@
+{
+  "agent_id": "01931a4b-9c10-7000-8000-000000000002",
+  "old_scope": ["repo:read"],
+  "new_scope": ["repo:read", "issue:write"],
+  "affected_principal_ids": ["01931a4b-9c10-7000-8000-000000000002"],
+  "changed_at": "2026-05-07T08:34:56.789012Z",
+  "_envelope_version": 1
+}

@@ -54,7 +54,14 @@ var (
 	// ErrEmptyDisplayName is returned by CreateAgent when display name is empty.
 	ErrEmptyDisplayName = errors.New("identity: agent display name is empty")
 
-	// ErrAgentNotFound is returned by SetAgentReputationScore when the target
-	// agent does not exist.
+	// ErrAgentNotFound is returned by SetAgentReputationScore / RevokeAgent /
+	// UpdateAgentPermissions when the target agent does not exist.
 	ErrAgentNotFound = errors.New("identity: agent not found")
+
+	// ErrUserNotFound is returned by DisableUser / AddOrgMember / RemoveOrgMember
+	// when the target user does not exist.
+	ErrUserNotFound = errors.New("identity: user not found")
+
+	// ErrEmptyRole is returned by AddOrgMember when role is empty.
+	ErrEmptyRole = errors.New("identity: org membership role is empty")
 )

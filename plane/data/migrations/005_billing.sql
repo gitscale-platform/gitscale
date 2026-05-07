@@ -70,10 +70,11 @@ CREATE TABLE billing.usage_events (
   value BIGINT NOT NULL,
   repo_id UUID,                         -- soft ref to repositories.repositories(id), nullable
   event_source TEXT NOT NULL,
-  external_event_id UUID UNIQUE,        -- idempotency for ClickHouse → PG sync
+  external_event_id UUID,               -- idempotency for ClickHouse → PG sync; uniqueness enforced via composite constraint below (partitioning requires ts)
   ts TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id, ts),                  -- partition key included per PG requirement
+  UNIQUE (external_event_id, ts),        -- partition key included; NULLs permitted
   CONSTRAINT chk_usage_events_principal_type_valid
     CHECK (principal_type IN ('human', 'agent', 'ci_runner')),
   CONSTRAINT chk_usage_events_value_nonnegative

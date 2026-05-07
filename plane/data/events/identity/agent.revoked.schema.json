@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/identity/agent.revoked.schema.json",
+  "title": "agent.revoked",
+  "description": "Emitted when an AgentIdentity is soft-revoked. Payload of the identity_outbox row whose event_type = 'agent.revoked'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "parent_user_id",
+    "reason",
+    "affected_principal_ids",
+    "revoked_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "agent_id": { "type": "string", "format": "uuid" },
+    "parent_user_id": { "type": "string", "format": "uuid" },
+    "reason": { "type": "string" },
+    "affected_principal_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "revoked_at": { "type": "string", "format": "date-time" },
+    "_envelope_version": { "type": "integer", "const": 1 }
+  }
+}

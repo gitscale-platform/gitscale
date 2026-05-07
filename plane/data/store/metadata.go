@@ -114,11 +114,12 @@ type IdentityWriter interface {
 	// Clamping is enforced by the database CHECK constraint; the caller is
 	// responsible for computing the new score outside the transaction.
 	SetAgentReputationScore(ctx context.Context, agentID uuid.UUID, score float64) error
-	// DisableUser soft-disables a human user. Not implemented until #15-revocation.
-	DisableUser(ctx context.Context, userID uuid.UUID) error
-	// RevokeAgent soft-revokes an agent identity. Not implemented until #15-revocation.
-	RevokeAgent(ctx context.Context, agentID uuid.UUID) error
-	// UpdateAgentPermissions replaces the permission_scope array. Not implemented until #15-revocation.
+	// DisableUser sets human_users.disabled_at = now() and disable_reason = reason.
+	// The row is not deleted; downstream consumers gate on disabled_at IS NOT NULL.
+	DisableUser(ctx context.Context, userID uuid.UUID, reason string) error
+	// RevokeAgent sets agent_identities.revoked_at = now() and revoke_reason = reason.
+	RevokeAgent(ctx context.Context, agentID uuid.UUID, reason string) error
+	// UpdateAgentPermissions replaces the permission_scope array.
 	UpdateAgentPermissions(ctx context.Context, agentID uuid.UUID, scope []string) error
 	AddOrgMember(ctx context.Context, m OrgMembership) error
 	RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error

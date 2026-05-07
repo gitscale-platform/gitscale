@@ -106,7 +106,7 @@ func (s *postgresService) CreateAgent(ctx context.Context, parentUserID uuid.UUI
 		ID:              uuid.New(),
 		DisplayName:     displayName,
 		ParentUserID:    parentUserID,
-		PermissionScope: append([]string(nil), scope...),
+		PermissionScope: append([]string{}, scope...),
 		RateBucket:      "agent_standard",
 		ReputationScore: 0.5,
 		CreatedAt:       s.clock(),
@@ -152,24 +152,98 @@ func (s *postgresService) SetAgentReputationScore(ctx context.Context, agentID u
 	})
 }
 
-// Revocation surface lands in #15-revocation.
-
-func (s *postgresService) DisableUser(_ context.Context, _ uuid.UUID, _ string) error {
-	return ErrNotImplemented
+func (s *postgresService) DisableUser(ctx context.Context, id uuid.UUID, reason string) error {
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			existing, err := tx.Identity().GetUserByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return ErrUserNotFound
+			}
+			if err := tx.Identity().DisableUser(ctx, id, reason); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "human_user", id,
+				EventUserDisabled, newUserDisabledPayload(id, reason, s.clock()))
+		})
+	})
 }
 
-func (s *postgresService) RevokeAgent(_ context.Context, _ uuid.UUID, _ string) error {
-	return ErrNotImplemented
+func (s *postgresService) RevokeAgent(ctx context.Context, id uuid.UUID, reason string) error {
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			existing, err := tx.Identity().GetAgentByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return ErrAgentNotFound
+			}
+			if err := tx.Identity().RevokeAgent(ctx, id, reason); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "agent_identity", id,
+				EventAgentRevoked, newAgentRevokedPayload(id, existing.ParentUserID, reason, s.clock()))
+		})
+	})
 }
 
-func (s *postgresService) UpdateAgentPermissions(_ context.Context, _ uuid.UUID, _ []string) error {
-	return ErrNotImplemented
+func (s *postgresService) UpdateAgentPermissions(ctx context.Context, id uuid.UUID, scope []string) error {
+	newScope := append([]string{}, scope...)
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			existing, err := tx.Identity().GetAgentByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return ErrAgentNotFound
+			}
+			oldScope := append([]string{}, existing.PermissionScope...)
+			if err := tx.Identity().UpdateAgentPermissions(ctx, id, newScope); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "agent_identity", id,
+				EventPrincipalPermissionsChanged,
+				newPrincipalPermissionsChangedPayload(id, oldScope, newScope, s.clock()))
+		})
+	})
 }
 
-func (s *postgresService) AddOrgMember(_ context.Context, _, _ uuid.UUID, _ string) error {
-	return ErrNotImplemented
+func (s *postgresService) AddOrgMember(ctx context.Context, orgID, userID uuid.UUID, role string) error {
+	if role == "" {
+		return ErrEmptyRole
+	}
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			user, err := tx.Identity().GetUserByID(ctx, userID)
+			if err != nil {
+				return err
+			}
+			if user == nil {
+				return ErrUserNotFound
+			}
+			if err := tx.Identity().AddOrgMember(ctx, store.OrgMembership{
+				OrgID: orgID, UserID: userID, Role: role,
+			}); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "org_membership", userID,
+				EventOrgMemberAdded, newOrgMemberAddedPayload(orgID, userID, role, s.clock()))
+		})
+	})
 }
 
-func (s *postgresService) RemoveOrgMember(_ context.Context, _, _ uuid.UUID) error {
-	return ErrNotImplemented
+func (s *postgresService) RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error {
+	return WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			if err := tx.Identity().RemoveOrgMember(ctx, orgID, userID); err != nil {
+				return err
+			}
+			return tx.WriteOutbox(ctx, store.DomainIdentity, "org_membership", userID,
+				EventOrgMemberRemoved, newOrgMemberRemovedPayload(orgID, userID, s.clock()))
+		})
+	})
 }
