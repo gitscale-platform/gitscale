@@ -70,7 +70,7 @@ func TestRateLimiter_Redis_Compliance(t *testing.T) {
 		client := redis.NewClient(opt)
 		inner := ratelimit.NewRedisLimiter(client)
 		lim := ratelimit.WithNamespace(inner, fmt.Sprintf("test%d", n))
-		return lim, nil, func() { client.Close() }
+		return lim, nil, func() { _ = client.Close() }
 	}
 
 	compliance.RunRateLimiterCompliance(t, factory)
