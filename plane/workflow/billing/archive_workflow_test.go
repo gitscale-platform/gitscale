@@ -121,6 +121,30 @@ func TestPartitionArchiveWorkflow_exportRetryOnFirstFailure(t *testing.T) {
 	}
 }
 
+func TestPartitionArchiveWorkflow_invalidInputRejected(t *testing.T) {
+	cases := []struct {
+		name string
+		in   ArchiveInput
+	}{
+		{"zero", ArchiveInput{}},
+		{"yearTooLow", ArchiveInput{Year: 2025, Month: 5}},
+		{"yearTooHigh", ArchiveInput{Year: 2100, Month: 5}},
+		{"monthZero", ArchiveInput{Year: 2026, Month: 0}},
+		{"monthThirteen", ArchiveInput{Year: 2026, Month: 13}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &testsuite.WorkflowTestSuite{}
+			env := s.NewTestWorkflowEnvironment()
+			env.RegisterWorkflow(PartitionArchiveWorkflow)
+			env.ExecuteWorkflow(PartitionArchiveWorkflow, tc.in)
+			if env.GetWorkflowError() == nil {
+				t.Errorf("expected error for invalid input %+v", tc.in)
+			}
+		})
+	}
+}
+
 func TestPartitionArchiveWorkflow_dropFailureSurfacesError(t *testing.T) {
 	s := &testsuite.WorkflowTestSuite{}
 	env := s.NewTestWorkflowEnvironment()

@@ -34,6 +34,12 @@ type ArchiveResult struct {
 // PG (detached) and object store; no data loss. Runbook: verify object store
 // integrity then DROP TABLE manually or re-run the workflow.
 func PartitionArchiveWorkflow(ctx workflow.Context, in ArchiveInput) (ArchiveResult, error) {
+	if in.Year < 2026 || in.Year > 2099 {
+		return ArchiveResult{}, fmt.Errorf("archive: year %d out of supported range [2026, 2099]", in.Year)
+	}
+	if in.Month < 1 || in.Month > 12 {
+		return ArchiveResult{}, fmt.Errorf("archive: month %d out of range [1, 12]", in.Month)
+	}
 	partitionName := fmt.Sprintf("billing.usage_events_%04d_%02d", in.Year, in.Month)
 
 	shortOpts := workflow.ActivityOptions{
