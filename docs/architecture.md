@@ -668,8 +668,8 @@ Consequences: <positive, negative, follow-ups>
 
 ### ADR-019: Adopted application-plane RPC as the only state-mutation path from the workflow plane
 
-- **Status:** Proposed
-- **Date:** 2026-05-06
+- **Status:** Accepted
+- **Date:** 2026-05-06 (proposed); 2026-05-07 (accepted after #33 workflow bootstrap and #18-rollover billing partition rollover both shipped against `appclient`)
 - **Context:** Temporal workflows in `plane/workflow/` need to mutate metadata-layer state — partition rollover, agent-session lifecycle, CI pipeline state transitions, future automated remediation. Two architectural paths exist: (1) direct path — workflow activities receive `plane/data/store.MetadataStore` and call `Transact` + `WriteOutbox` themselves; (2) app-plane RPC path — workflow activities receive a thin gRPC client (`plane/workflow/appclient/`) into the application plane's per-domain service, which performs the Tx + outbox write. The direct path is technically permitted by the existing interfaces; ADR-008 is preserved either way. The choice is not about transactional integrity; it is about where domain invariants live.
 - **Decision:**
 
