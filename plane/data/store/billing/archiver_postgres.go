@@ -24,23 +24,46 @@ func NewPostgresArchiver(pool *pgxpool.Pool) *PostgresArchiver {
 func (a *PostgresArchiver) DetachUsageEventsPartition(ctx context.Context, year, month int) error {
 	tableName := fmt.Sprintf("usage_events_%04d_%02d", year, month)
 
-	var attached bool
+	var attached, pending bool
 	err := a.pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM pg_inherits
-			JOIN pg_class parent ON pg_inherits.inhparent = parent.oid
-			JOIN pg_class child  ON pg_inherits.inhrelid  = child.oid
-			JOIN pg_namespace ns ON parent.relnamespace   = ns.oid
-			WHERE ns.nspname    = 'billing'
-			  AND parent.relname = 'usage_events'
-			  AND child.relname  = $1
-		)`, tableName,
-	).Scan(&attached)
+		SELECT
+		  EXISTS (
+		    SELECT 1 FROM pg_inherits
+		    JOIN pg_class parent ON pg_inherits.inhparent = parent.oid
+		    JOIN pg_class child  ON pg_inherits.inhrelid  = child.oid
+		    JOIN pg_namespace ns ON parent.relnamespace   = ns.oid
+		    WHERE ns.nspname    = 'billing'
+		      AND parent.relname = 'usage_events'
+		      AND child.relname  = $1
+		  ) AS attached,
+		  COALESCE((
+		    SELECT inhdetachpending FROM pg_inherits
+		    JOIN pg_class parent ON pg_inherits.inhparent = parent.oid
+		    JOIN pg_class child  ON pg_inherits.inhrelid  = child.oid
+		    JOIN pg_namespace ns ON parent.relnamespace   = ns.oid
+		    WHERE ns.nspname    = 'billing'
+		      AND parent.relname = 'usage_events'
+		      AND child.relname  = $1
+		  ), false) AS pending`, tableName,
+	).Scan(&attached, &pending)
 	if err != nil {
 		return fmt.Errorf("archiver: probe pg_inherits: %w", err)
 	}
 	if !attached {
 		return nil // already detached
+	}
+	if pending {
+		// Recover from a previously-interrupted DETACH CONCURRENTLY:
+		// pg_inherits row still exists with inhdetachpending=true. A re-issued
+		// DETACH CONCURRENTLY would fail; FINALIZE completes the detach.
+		_, err = a.pool.Exec(ctx, fmt.Sprintf(
+			"ALTER TABLE billing.usage_events DETACH PARTITION billing.%s FINALIZE",
+			tableName,
+		))
+		if err != nil {
+			return fmt.Errorf("archiver: finalize detach %s: %w", tableName, err)
+		}
+		return nil
 	}
 
 	_, err = a.pool.Exec(ctx, fmt.Sprintf(
@@ -90,7 +113,14 @@ type pgxCursor struct {
 	err  error
 }
 
-func (c *pgxCursor) Next(_ context.Context) bool {
+func (c *pgxCursor) Next(ctx context.Context) bool {
+	// Short-circuit on context cancellation: pgx.Rows.Next() does not check
+	// ctx, so without this an in-flight scan can run for a long time after
+	// Temporal cancels the activity (heartbeat timeout, worker shutdown).
+	if err := ctx.Err(); err != nil {
+		c.err = err
+		return false
+	}
 	if !c.rows.Next() {
 		return false
 	}
