@@ -47,7 +47,8 @@ logs/
 .claude/skills/*-workspace/
 .claude/worktrees/
 .claude/ralph-loop.local.md
-docs/superpowers/runs/
+docs/superpowers/runs/*
+!docs/superpowers/runs/*.completion.md
 docs/superpowers/prompts/
 go.work.sum
 
