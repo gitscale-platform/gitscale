@@ -75,7 +75,7 @@ Avoid committing to these until the spike is resolved:
 
 Valid plane names: `edge`, `git`, `application`, `workflow`, `data`. Cross-cutting tooling (hooks, CI config, repo-wide docs) uses `meta` — e.g. `chore/meta-pre-commit-lint-hook`.
 
-Every merged PR must close at least one issue.
+Every merged `feat/`, `fix/`, `spike/`, or `adr/` PR must close at least one issue. `chore/` and `docs/` PRs may skip — the branch prefix encodes intent. A change is a chore only if it has no behaviour visible to users or operators (e.g. dependency bumps, gitignore tweaks, CI config, hook installs, repo-wide doc commits). If it moves a metric, alters an API surface, or touches an ADR, it is not a chore.
 
 ## CI linter rule
 
