@@ -109,10 +109,14 @@ WHERE  n.nspname = 'billing' AND p.relname = 'usage_events'`
 	return max, count, nil
 }
 
-// parsePartitionUpperBound extracts the TO ('YYYY-MM-DD') date from a
-// `pg_get_expr` partition-bound string of the form
+// parsePartitionUpperBound extracts the TO ('...') date from a
+// `pg_get_expr` partition-bound string. Postgres renders the bound in
+// either of two forms depending on the partition column type:
 //
-//	FOR VALUES FROM ('2026-05-01') TO ('2026-06-01')
+//	FOR VALUES FROM ('2026-05-01') TO ('2026-06-01')                   -- date
+//	FOR VALUES FROM ('2026-05-01 00:00:00+00') TO ('2026-06-01 00:00:00+00') -- timestamptz
+//
+// We accept either by parsing the leading YYYY-MM-DD prefix.
 func parsePartitionUpperBound(expr string) (time.Time, error) {
 	const marker = "TO ('"
 	i := strings.Index(expr, marker)
@@ -124,5 +128,10 @@ func parsePartitionUpperBound(expr string) (time.Time, error) {
 	if end < 0 {
 		return time.Time{}, fmt.Errorf("partition gap metric: unterminated TO clause in %q", expr)
 	}
-	return time.Parse("2006-01-02", rest[:end])
+	literal := rest[:end]
+	// Strip any time-of-day / tz suffix; we only need the date.
+	if sp := strings.Index(literal, " "); sp >= 0 {
+		literal = literal[:sp]
+	}
+	return time.Parse("2006-01-02", literal)
 }
