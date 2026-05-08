@@ -33,6 +33,7 @@ import (
 	gswf "github.com/gitscale-platform/gitscale/plane/workflow"
 	"github.com/gitscale-platform/gitscale/plane/workflow/billing"
 	"github.com/gitscale-platform/gitscale/plane/workflow/canary"
+	"github.com/gitscale-platform/gitscale/plane/workflow/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -63,10 +64,34 @@ func run(logger *slog.Logger) error {
 	logger.Info("connecting to Temporal",
 		"namespace", namespace, "host", host)
 
+	// Spec D7 (#62): bootstrap OpenTelemetry tracing before constructing the
+	// Temporal client so the interceptor uses the configured TracerProvider.
+	// SetupTracing runs from main, not a workflow function, so the
+	// network/global-state side effects do not violate Temporal determinism.
+	tracingCtx, cancelTracing := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownTracing, err := observability.SetupTracing(tracingCtx, observability.Config{
+		ServiceName:      "workflow-worker",
+		ServiceNamespace: namespace,
+		Environment:      envDefault("GITSCALE_ENV", "dev"),
+		OTLPEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+	})
+	cancelTracing()
+	if err != nil {
+		return fmt.Errorf("observability.SetupTracing: %w", err)
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(sctx); err != nil {
+			logger.Error("otel shutdown", "err", err)
+		}
+	}()
+
 	c, err := client.Dial(client.Options{
-		HostPort:  host,
-		Namespace: namespace,
-		Logger:    sdkLogger{logger},
+		HostPort:     host,
+		Namespace:    namespace,
+		Logger:       sdkLogger{logger},
+		Interceptors: observability.TemporalInterceptor(),
 	})
 	if err != nil {
 		return fmt.Errorf("temporal client.Dial: %w", err)
@@ -83,6 +108,7 @@ func run(logger *slog.Logger) error {
 		MaxConcurrentWorkflowTaskPollers:   workflowPollers,
 		MaxConcurrentActivityTaskPollers:   activityPollers,
 		WorkerStopTimeout:                  stopTimeout,
+		Interceptors:                       observability.TemporalWorkerInterceptor(),
 	})
 
 	canary.Bundle(cacheStore).Apply(workerRegistrar{w})
