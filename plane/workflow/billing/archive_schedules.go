@@ -17,15 +17,12 @@ const ArchiveCronExpression = "0 14 24 * *"
 // EnsureArchiveSchedule registers (or converges) the monthly archive schedule.
 // Called by cmd/workflow-worker at boot after the worker is running.
 //
-// ATTENTION: This helper currently registers the schedule without computing
-// (year, month) for the workflow input — the action below has no Args, so the
-// workflow would receive ArchiveInput{Year:0, Month:0} and fail validation.
-// The cmd-level wiring that supplies real archive deps must also compute
-// (year, month) from time.Now() − 18 months and set Args accordingly. The
-// workflow itself rejects invalid inputs, so a schedule fire with no args
-// surfaces as a workflow error rather than a silent data corruption.
-//
-// See follow-up issue for full schedule wiring.
+// The schedule targets ArchiveRouterWorkflow rather than
+// PartitionArchiveWorkflow directly: ScheduleWorkflowAction.Args is statically
+// bound at schedule-create time, so the (year, month) := fireTime − 18 months
+// computation must happen at fire time. ArchiveRouterWorkflow performs that
+// computation deterministically via workflow.Now and starts
+// PartitionArchiveWorkflow as a child. See archive_router_workflow.go.
 func EnsureArchiveSchedule(ctx context.Context, sc gswf.ScheduleClient) (client.ScheduleHandle, error) {
 	return gswf.EnsureSchedule(ctx, sc, client.ScheduleOptions{
 		ID: ArchiveScheduleID,
@@ -35,7 +32,7 @@ func EnsureArchiveSchedule(ctx context.Context, sc gswf.ScheduleClient) (client.
 		},
 		Action: &client.ScheduleWorkflowAction{
 			ID:        "billing-partition-archive",
-			Workflow:  "PartitionArchiveWorkflow",
+			Workflow:  "ArchiveRouterWorkflow",
 			TaskQueue: gswf.QueueBillingMaintenance,
 		},
 	})

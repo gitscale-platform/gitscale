@@ -28,11 +28,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gitscale-platform/gitscale/plane/data/cache"
 	"github.com/gitscale-platform/gitscale/plane/data/outbox"
 	"github.com/gitscale-platform/gitscale/plane/data/store"
 	billingstore "github.com/gitscale-platform/gitscale/plane/data/store/billing"
 	gswf "github.com/gitscale-platform/gitscale/plane/workflow"
+	"github.com/gitscale-platform/gitscale/plane/workflow/appclient"
 	"github.com/gitscale-platform/gitscale/plane/workflow/billing"
 	"github.com/gitscale-platform/gitscale/plane/workflow/canary"
 	"github.com/gitscale-platform/gitscale/plane/workflow/observability"
@@ -41,6 +45,8 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -133,7 +139,78 @@ func run(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("billing.NewCreatePartitionActivity: %w", err)
 		}
-		billing.Bundle(partActivity, nil).Apply(workerRegistrar{w})
+
+		// ArchiveDeps wiring (#76, ADR-018 + ADR-019). Opt-in via S3_BUCKET:
+		// when set, build the four archive activities (DDL via Postgres
+		// archiver, encrypted parquet via Vault transit + S3) and register
+		// them through billing.Bundle. When unset, skip — Bundle handles a
+		// nil ArchiveDeps and the schedule is not registered.
+		var archiveDeps *billing.ArchiveDeps
+		var billingConn *grpc.ClientConn
+		defer func() {
+			if billingConn != nil {
+				_ = billingConn.Close()
+			}
+		}()
+		if bucket := os.Getenv("S3_BUCKET"); bucket != "" {
+			billingConn, err = dialBillingService(
+				os.Getenv("BILLING_SERVICE_ADDR"),
+				envBool("WORKER_BILLING_INSECURE", false),
+			)
+			if err != nil {
+				return fmt.Errorf("billing dial: %w", err)
+			}
+			billingClient := appclient.NewGRPCBillingClient(billingConn)
+
+			vaultClient, err := billing.LoadVaultClientFromEnv()
+			if err != nil {
+				return fmt.Errorf("vault client: %w", err)
+			}
+			keys := billing.NewVaultKeyProvider(
+				vaultClient,
+				envDefault("VAULT_TRANSIT_MOUNT", ""),
+				envDefault("VAULT_BILLING_KEY", ""),
+			)
+
+			s3Ctx, cancelS3 := context.WithTimeout(context.Background(), 10*time.Second)
+			s3client, err := buildS3ClientFromEnv(s3Ctx)
+			cancelS3()
+			if err != nil {
+				return fmt.Errorf("s3 client: %w", err)
+			}
+			objStore := billing.NewS3ObjectStore(s3client, bucket)
+
+			archiver := billingstore.NewPostgresArchiver(pool)
+			detach, err := billing.NewDetachPartitionActivity(archiver)
+			if err != nil {
+				return fmt.Errorf("detach activity: %w", err)
+			}
+			drop, err := billing.NewDropPartitionActivity(archiver)
+			if err != nil {
+				return fmt.Errorf("drop activity: %w", err)
+			}
+			emit, err := billing.NewEmitArchiveEventActivity(billingClient)
+			if err != nil {
+				return fmt.Errorf("emit activity: %w", err)
+			}
+			export, err := billing.NewExportActivity(archiver, objStore, keys, bucket)
+			if err != nil {
+				return fmt.Errorf("export activity: %w", err)
+			}
+			archiveDeps = &billing.ArchiveDeps{
+				Detach: detach,
+				Export: export,
+				Emit:   emit,
+				Drop:   drop,
+			}
+			logger.Info("billing archive deps wired",
+				"bucket", bucket,
+				"billing_addr", os.Getenv("BILLING_SERVICE_ADDR"))
+		} else {
+			logger.Info("S3_BUCKET unset; skipping archive deps + schedule")
+		}
+
+		billing.Bundle(partActivity, archiveDeps).Apply(workerRegistrar{w})
 
 		// Outbox TTL expirer (#45, ADR-008): one Expirer per domain, dispatched
 		// by a single fan-out workflow on the same task queue.
@@ -158,6 +235,21 @@ func run(logger *slog.Logger) error {
 		}
 		logger.Info("billing partition-rollover registered",
 			"schedule_id", billing.ScheduleID, "cron", billing.CronExpression)
+
+		// Register / converge the monthly archive schedule when archive
+		// deps are wired (#76). The schedule targets ArchiveRouterWorkflow
+		// which computes (year, month) := workflow.Now − 18mo at fire time.
+		if archiveDeps != nil {
+			ctxArch, cancelArch := context.WithTimeout(context.Background(), 10*time.Second)
+			_, err = billing.EnsureArchiveSchedule(ctxArch, c.ScheduleClient())
+			cancelArch()
+			if err != nil {
+				return fmt.Errorf("billing.EnsureArchiveSchedule: %w", err)
+			}
+			logger.Info("billing partition-archive registered",
+				"schedule_id", billing.ArchiveScheduleID,
+				"cron", billing.ArchiveCronExpression)
+		}
 	} else {
 		logger.Info("POSTGRES_URL unset; skipping billing.Bundle + rollover schedule")
 	}
@@ -196,6 +288,49 @@ func (r workerRegistrar) RegisterActivity(a any) {
 		return
 	}
 	r.w.RegisterActivity(a)
+}
+
+// dialBillingService dials the application-plane billing service. Until
+// SPIRE/SPIFFE wiring lands (ADR-010) only WORKER_BILLING_INSECURE=true is
+// supported, mirroring the existing IDENTITY_SERVICE_INSECURE convention.
+func dialBillingService(addr string, allowInsecure bool) (*grpc.ClientConn, error) {
+	if addr == "" {
+		return nil, errors.New("BILLING_SERVICE_ADDR is empty")
+	}
+	if !allowInsecure {
+		return nil, errors.New("only WORKER_BILLING_INSECURE=true is supported until SPIRE/SPIFFE wiring lands (ADR-010)")
+	}
+	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+}
+
+// buildS3ClientFromEnv builds an AWS SDK v2 *s3.Client honouring S3_REGION
+// (default us-east-1) and the optional S3_ENDPOINT override (path-style for
+// minio dev). Credentials come from the default AWS chain.
+func buildS3ClientFromEnv(ctx context.Context) (*s3.Client, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithRegion(envDefault("S3_REGION", "us-east-1")),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("aws config: %w", err)
+	}
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.UsePathStyle = true
+		}
+	}), nil
+}
+
+func envBool(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
 }
 
 func envDefault(key, def string) string {
