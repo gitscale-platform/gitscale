@@ -24,6 +24,7 @@ Skills with no GitScale-specific assumptions. Could be lifted to `~/.claude/skil
 | Skill | Triggers on | Companion |
 |---|---|---|
 | [`writing-supervisor-runs`](writing-supervisor-runs/SKILL.md) | Scaffolding a new ralph-loop supervisor run (entry prompt + plan + state) | [`.claude/agents/supervisor.md`](../agents/supervisor.md) — generic single-iteration supervisor agent |
+| [`writing-completion-reports`](writing-completion-reports/SKILL.md) | Authoring the completion report at run termination (auto-derives outcome / wave traversal / worktree state; surfaces plan-delta candidates) | invoked by the supervisor agent's §Termination step; usable post-hoc by humans |
 
 ## Cohesion model
 

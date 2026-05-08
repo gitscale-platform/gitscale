@@ -231,12 +231,20 @@ Report format: exact step, command tried, error output (quoted exactly), file pa
 
 The plan defines `sentinel` (e.g. `SUPERVISOR-RUN-COMPLETE-2026-06-12`) and `completion_report_path`.
 
-Emit the sentinel on its own line, exactly as the plan specifies — character-for-character — ONLY when ALL hold:
+Termination is a multi-step iteration in itself — invoke the `writing-completion-reports` skill, commit its output, then emit the sentinel.
+
+Pre-conditions checked in order; ALL must hold before invoking the skill:
 
 - Every issue in `state.issues` is `MERGED` (plus any follow-up issues filed and registered during the run).
 - `gh pr list --state open --author @me` returns empty.
 - `git worktree list` shows only the primary worktree.
-- The completion report at `completion_report_path` is written and committed.
+
+When all hold:
+
+1. Invoke the `writing-completion-reports` skill. It reads the plan, state, iteration log, and merged-PR list, surfaces candidate plan deltas for confirmation, and writes the report to `<completion_report_path>` (typically `docs/superpowers/runs/<run_id>-supervisor.completion.md`).
+2. Commit the report with `docs(meta): supervisor run <run_id> completion report` (or the project's equivalent commit subject).
+3. Verify the commit landed: `git log origin/<default_branch> --oneline -1` shows the report commit (or push the commit if needed and the project allows direct-push for docs-only changes).
+4. Emit the sentinel on its own line, exactly as the plan specifies — character-for-character.
 
 Do not output the sentinel under any other circumstance. Do not paraphrase. Do not reformat. A single-character drift means ralph-loop continues.
 
