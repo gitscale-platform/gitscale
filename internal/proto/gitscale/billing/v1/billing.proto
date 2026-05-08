@@ -1,0 +1,32 @@
+// Billing service gRPC surface (ADR-019). RecordPartitionArchived is the only
+// RPC at this revision; it maps onto plane/application/billing.Service and
+// performs source-row + outbox-row write in a single Tx (ADR-008).
+syntax = "proto3";
+
+package gitscale.billing.v1;
+
+option go_package = "github.com/gitscale-platform/gitscale/internal/proto/billing/v1;billingv1";
+
+// BillingService is the only state-mutation path into the billing domain
+// from outside the application plane (ADR-019).
+service BillingService {
+  // RecordPartitionArchived persists the archival outcome for a usage_events
+  // monthly partition and emits billing.partition_archived to the outbox in
+  // the same Tx. Idempotent on (year, month, partition_name).
+  rpc RecordPartitionArchived(RecordPartitionArchivedRequest)
+      returns (RecordPartitionArchivedResponse);
+}
+
+message RecordPartitionArchivedRequest {
+  int32  year           = 1;  // 2026..2100
+  int32  month          = 2;  // 1..12
+  string partition_name = 3;  // e.g. "usage_events_2026_05"
+  string lake_uri       = 4;  // canonical s3:// URI returned by ObjectStore.Upload
+  int64  row_count      = 5;
+  int64  bytes_written  = 6;
+}
+
+message RecordPartitionArchivedResponse {
+  string archive_id = 1;  // UUID of partition_archives row (new or existing)
+  bool   created    = 2;  // false on idempotent retry
+}

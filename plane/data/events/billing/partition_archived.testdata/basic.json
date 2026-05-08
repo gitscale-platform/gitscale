@@ -1,0 +1,11 @@
+{
+  "archive_id": "01931a4b-9c10-7000-8000-000000000010",
+  "year": 2026,
+  "month": 5,
+  "partition_name": "usage_events_2026_05",
+  "lake_uri": "s3://lake/billing/usage_events/2026/05/",
+  "row_count": 1024,
+  "bytes_written": 524288,
+  "archived_at": "2026-05-08T00:00:00.000000Z",
+  "_envelope_version": 1
+}

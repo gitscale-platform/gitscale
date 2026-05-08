@@ -48,11 +48,13 @@ func TestPostgresMetadataStoreCompliance(t *testing.T) {
 			t.Fatalf("pgxpool.New: %v", err)
 		}
 
-		// Run migrations 000-005 against the fresh DB.
+		// Run all committed migrations against the fresh DB.
 		migrationsDir := filepath.Join("..", "..", "migrations")
 		for _, f := range []string{
 			"000_init.sql", "001_identity.sql", "002_repositories.sql",
 			"003_collaboration.sql", "004_ci.sql", "005_billing.sql",
+			"006_identity_revocation.sql",
+			"007_billing_partition_archives.sql",
 		} {
 			sql, err := os.ReadFile(filepath.Join(migrationsDir, f))
 			if err != nil {

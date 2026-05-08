@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/billing/partition_archived.schema.json",
+  "title": "billing.partition_archived",
+  "description": "Emitted when a billing.partition_archives row is inserted. Payload of the billing_outbox row whose event_type = 'billing.partition_archived'. ADR-008 invariant: written in the same Tx as the source row; idempotent on UNIQUE(year, month, partition_name).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "archive_id",
+    "year",
+    "month",
+    "partition_name",
+    "lake_uri",
+    "row_count",
+    "bytes_written",
+    "archived_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "archive_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "year": {
+      "type": "integer",
+      "minimum": 2026,
+      "maximum": 2100
+    },
+    "month": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12
+    },
+    "partition_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lake_uri": {
+      "type": "string",
+      "minLength": 1
+    },
+    "row_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bytes_written": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}
