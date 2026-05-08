@@ -29,10 +29,13 @@ type ArchiveResult struct {
 // PartitionArchiveWorkflow archives billing.usage_events_YYYY_MM to the
 // analytics-lake object store and drops the partition from PostgreSQL.
 //
-// Activity sequence: DetachPartition → Export → EmitOutbox → DropPartition.
+// Activity sequence: DetachPartition → Export → EmitOutbox →
+// GlueRegister → DropPartition.
 // Drop failure after emit surfaces as a workflow error — data exists in both
 // PG (detached) and object store; no data loss. Runbook: verify object store
 // integrity then DROP TABLE manually or re-run the workflow.
+// GlueRegister is idempotent (AlreadyExists treated as success), so re-runs
+// after partial completion are safe.
 func PartitionArchiveWorkflow(ctx workflow.Context, in ArchiveInput) (ArchiveResult, error) {
 	if in.Year < 2026 || in.Year > 2099 {
 		return ArchiveResult{}, fmt.Errorf("archive: year %d out of supported range [2026, 2099]", in.Year)
@@ -83,6 +86,17 @@ func PartitionArchiveWorkflow(ctx workflow.Context, in ArchiveInput) (ArchiveRes
 		},
 	).Get(emitCtx, nil); err != nil {
 		return ArchiveResult{}, fmt.Errorf("archive: emit: %w", err)
+	}
+
+	glueCtx := workflow.WithActivityOptions(ctx, emitOpts)
+	if err := workflow.ExecuteActivity(glueCtx, ActivityNameGlueRegister,
+		GlueRegisterInput{
+			Year:    in.Year,
+			Month:   in.Month,
+			LakeURI: exportResult.LakeURI,
+		},
+	).Get(glueCtx, nil); err != nil {
+		return ArchiveResult{}, fmt.Errorf("archive: glue register: %w", err)
 	}
 
 	dropCtx := workflow.WithActivityOptions(ctx, shortOpts)

@@ -30,6 +30,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gitscale-platform/gitscale/plane/data/cache"
 	"github.com/gitscale-platform/gitscale/plane/data/outbox"
@@ -197,15 +198,44 @@ func run(logger *slog.Logger) error {
 			if err != nil {
 				return fmt.Errorf("export activity: %w", err)
 			}
+
+			// GlueRegisterActivity (#77, ADR-018 §Query path). Reuses the same
+			// AWS SDK config as the S3 client; AWS_REGION applies. Database
+			// and table names are constants matching terraform/analytics.
+			glueCtx, cancelGlue := context.WithTimeout(context.Background(), 10*time.Second)
+			glueCfg, err := awsconfig.LoadDefaultConfig(glueCtx,
+				awsconfig.WithRegion(envDefault("AWS_REGION", envDefault("S3_REGION", "us-east-1"))),
+			)
+			cancelGlue()
+			if err != nil {
+				return fmt.Errorf("aws config (glue): %w", err)
+			}
+			glueClient := glue.NewFromConfig(glueCfg, func(o *glue.Options) {
+				if endpoint := os.Getenv("GLUE_ENDPOINT"); endpoint != "" {
+					o.BaseEndpoint = aws.String(endpoint)
+				}
+			})
+			glueRegister, err := billing.NewGlueRegisterActivity(
+				glueClient,
+				envDefault("GLUE_DATABASE", "gitscale_analytics"),
+				envDefault("GLUE_TABLE", "usage_events"),
+			)
+			if err != nil {
+				return fmt.Errorf("glue register activity: %w", err)
+			}
+
 			archiveDeps = &billing.ArchiveDeps{
-				Detach: detach,
-				Export: export,
-				Emit:   emit,
-				Drop:   drop,
+				Detach:       detach,
+				Export:       export,
+				Emit:         emit,
+				GlueRegister: glueRegister,
+				Drop:         drop,
 			}
 			logger.Info("billing archive deps wired",
 				"bucket", bucket,
-				"billing_addr", os.Getenv("BILLING_SERVICE_ADDR"))
+				"billing_addr", os.Getenv("BILLING_SERVICE_ADDR"),
+				"glue_database", envDefault("GLUE_DATABASE", "gitscale_analytics"),
+				"glue_table", envDefault("GLUE_TABLE", "usage_events"))
 		} else {
 			logger.Info("S3_BUCKET unset; skipping archive deps + schedule")
 		}
