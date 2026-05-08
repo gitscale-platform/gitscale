@@ -104,7 +104,7 @@ func run(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("billing.NewCreatePartitionActivity: %w", err)
 		}
-		billing.Bundle(partActivity).Apply(workerRegistrar{w})
+		billing.Bundle(partActivity, nil).Apply(workerRegistrar{w})
 
 		// Register / converge the monthly rollover schedule.
 		ctxSched, cancelSched := context.WithTimeout(context.Background(), 10*time.Second)
