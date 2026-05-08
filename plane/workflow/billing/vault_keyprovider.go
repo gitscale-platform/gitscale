@@ -5,19 +5,29 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	vault "github.com/hashicorp/vault/api"
 )
 
-// VaultKeyProvider derives per-month DEKs by calling Vault transit
-// `datakey/plaintext/<keyName>` with `derived=true` and a year-month
-// context. The transit key must have been created with `derived=true` and
-// `exportable=false`. KEKHint records the active key version so post-rotation
-// restore (issue #79) can request the correct version explicitly.
+// VaultKeyProvider derives per-month DEKs from a Vault transit key by
+// computing HMAC-SHA256(transit_key, "YYYY-MM"). The HMAC is deterministic for
+// a given (key version, input) pair, which is exactly the HKDF-style
+// determinism ADR-018 §Encryption prescribes ("HKDF(platform_billing_master,
+// 'year-month')"). Vault returns the HMAC prefixed with a version tag of the
+// form "vault:v<N>:<base64>"; we record N in KEKHint so post-rotation restore
+// (issue #79) can pin the same key version.
+//
+// Rationale for HMAC (vs transit/datakey/plaintext): datakey returns a fresh
+// random key on every call, defeating the deterministic per-month derivation
+// that ADR-018 requires. transit/hmac is Vault's exposed PRF over the
+// transit key — same key, same input, same output, with key_version embedded
+// in the response prefix.
 //
 // VaultKeyProvider.GetDEK is invoked from inside a Temporal Activity
 // (ExportActivity.Execute), never from a workflow function — network calls
-// and non-determinism are permitted in that scope.
+// and non-determinism in the transport layer are permitted in that scope.
 type VaultKeyProvider struct {
 	client    *vault.Client
 	mountPath string
@@ -43,9 +53,8 @@ func NewVaultKeyProvider(client *vault.Client, mountPath, keyName string) *Vault
 	return &VaultKeyProvider{client: client, mountPath: mountPath, keyName: keyName}
 }
 
-// GetDEK derives a 32-byte AES-256 DEK for (year, month). The Vault transit
-// derivation context is the ASCII string "YYYY-MM" (base64-encoded for
-// transport per Vault's API).
+// GetDEK derives a 32-byte AES-256 DEK for (year, month) deterministically by
+// asking Vault to HMAC-SHA256 the ASCII string "YYYY-MM" with the transit key.
 func (v *VaultKeyProvider) GetDEK(ctx context.Context, year, month int) (DEK, error) {
 	if v.client == nil {
 		return DEK{}, errors.New("vault keyprovider: nil client")
@@ -57,13 +66,12 @@ func (v *VaultKeyProvider) GetDEK(ctx context.Context, year, month int) (DEK, er
 		return DEK{}, fmt.Errorf("vault keyprovider: month %d out of range", month)
 	}
 
-	contextStr := fmt.Sprintf("%04d-%02d", year, month)
-	contextB64 := base64.StdEncoding.EncodeToString([]byte(contextStr))
-	path := fmt.Sprintf("%s/datakey/plaintext/%s", v.mountPath, v.keyName)
+	input := fmt.Sprintf("%04d-%02d", year, month)
+	inputB64 := base64.StdEncoding.EncodeToString([]byte(input))
+	path := fmt.Sprintf("%s/hmac/%s/sha2-256", v.mountPath, v.keyName)
 
 	secret, err := v.client.Logical().WriteWithContext(ctx, path, map[string]any{
-		"context": contextB64,
-		"bits":    256,
+		"input": inputB64,
 	})
 	if err != nil {
 		return DEK{}, fmt.Errorf("vault keyprovider: write %s: %w", path, err)
@@ -72,25 +80,21 @@ func (v *VaultKeyProvider) GetDEK(ctx context.Context, year, month int) (DEK, er
 		return DEK{}, errors.New("vault keyprovider: empty Vault response")
 	}
 
-	plaintextB64, _ := secret.Data["plaintext"].(string)
-	if plaintextB64 == "" {
-		return DEK{}, errors.New("vault keyprovider: missing plaintext in response")
-	}
-	plaintext, err := base64.StdEncoding.DecodeString(plaintextB64)
-	if err != nil {
-		return DEK{}, fmt.Errorf("vault keyprovider: decode plaintext: %w", err)
-	}
-	if len(plaintext) != 32 {
-		return DEK{}, fmt.Errorf("vault keyprovider: expected 32-byte DEK, got %d", len(plaintext))
+	hmacStr, _ := secret.Data["hmac"].(string)
+	if hmacStr == "" {
+		return DEK{}, errors.New("vault keyprovider: missing hmac in response")
 	}
 
-	keyVersion, err := readIntFromVault(secret.Data, "key_version")
+	keyVersion, dekBytes, err := parseVaultHMAC(hmacStr)
 	if err != nil {
 		return DEK{}, err
 	}
+	if len(dekBytes) != 32 {
+		return DEK{}, fmt.Errorf("vault keyprovider: expected 32-byte HMAC-SHA256, got %d", len(dekBytes))
+	}
 
 	return DEK{
-		Bytes:   plaintext,
+		Bytes:   dekBytes,
 		KEKHint: fmt.Sprintf("platform-billing-v%d", keyVersion),
 	}, nil
 }
@@ -110,26 +114,20 @@ func LoadVaultClientFromEnv() (*vault.Client, error) {
 	return c, nil
 }
 
-func readIntFromVault(m map[string]any, key string) (int, error) {
-	raw, ok := m[key]
-	if !ok {
-		return 0, fmt.Errorf("vault keyprovider: missing %q in response", key)
+// parseVaultHMAC parses Vault's transit HMAC response of the form
+// "vault:v<N>:<base64>" into (keyVersion, rawDigest).
+func parseVaultHMAC(s string) (int, []byte, error) {
+	parts := strings.SplitN(s, ":", 3)
+	if len(parts) != 3 || parts[0] != "vault" || !strings.HasPrefix(parts[1], "v") {
+		return 0, nil, fmt.Errorf("vault keyprovider: malformed hmac %q", s)
 	}
-	switch v := raw.(type) {
-	case int:
-		return v, nil
-	case int64:
-		return int(v), nil
-	case float64:
-		return int(v), nil
-	case interface{ Int64() (int64, error) }:
-		// json.Number
-		i, err := v.Int64()
-		if err != nil {
-			return 0, fmt.Errorf("vault keyprovider: %q not int: %w", key, err)
-		}
-		return int(i), nil
-	default:
-		return 0, fmt.Errorf("vault keyprovider: %q has unexpected type %T", key, raw)
+	v, err := strconv.Atoi(strings.TrimPrefix(parts[1], "v"))
+	if err != nil {
+		return 0, nil, fmt.Errorf("vault keyprovider: bad key version in %q: %w", s, err)
 	}
+	raw, err := base64.StdEncoding.DecodeString(parts[2])
+	if err != nil {
+		return 0, nil, fmt.Errorf("vault keyprovider: bad base64 in hmac %q: %w", s, err)
+	}
+	return v, raw, nil
 }
