@@ -240,7 +240,62 @@ func run(logger *slog.Logger) error {
 			logger.Info("S3_BUCKET unset; skipping archive deps + schedule")
 		}
 
-		billing.Bundle(partActivity, archiveDeps).Apply(workerRegistrar{w})
+		// RestoreDeps wiring (#79, ADR-018 §Restore + ADR-019 amendment).
+		// Opt-in via the same S3_BUCKET gate as archive: restore needs the
+		// object store + Vault + Postgres. Quarantine writes target only
+		// billing.usage_events_restore_YYYY_MM, never the live partition tree.
+		var restoreDeps *billing.RestoreDeps
+		if archiveDeps != nil {
+			vaultClient, err := billing.LoadVaultClientFromEnv()
+			if err != nil {
+				return fmt.Errorf("vault client (restore): %w", err)
+			}
+			restoreKeys := billing.NewVaultKeyProvider(
+				vaultClient,
+				envDefault("VAULT_TRANSIT_MOUNT", ""),
+				envDefault("VAULT_BILLING_KEY", ""),
+			)
+			s3Ctx, cancelS3 := context.WithTimeout(context.Background(), 10*time.Second)
+			restoreS3, err := buildS3ClientFromEnv(s3Ctx)
+			cancelS3()
+			if err != nil {
+				return fmt.Errorf("s3 client (restore): %w", err)
+			}
+			restoreObjStore := billing.NewS3ObjectStore(restoreS3, os.Getenv("S3_BUCKET"))
+
+			restorer := billingstore.NewPostgresRestorer(pool)
+			fetchAct, err := billing.NewFetchManifestActivity(restoreObjStore)
+			if err != nil {
+				return fmt.Errorf("fetch manifest activity: %w", err)
+			}
+			verifyAct, err := billing.NewVerifyChecksumActivity(restoreObjStore)
+			if err != nil {
+				return fmt.Errorf("verify checksum activity: %w", err)
+			}
+			scratchDir := envDefault("RESTORE_SCRATCH_DIR", "")
+			decAct, err := billing.NewDownloadAndDecryptActivity(restoreObjStore, restoreKeys, scratchDir)
+			if err != nil {
+				return fmt.Errorf("download+decrypt activity: %w", err)
+			}
+			loadAct, err := billing.NewLoadIntoQuarantineActivity(restorer)
+			if err != nil {
+				return fmt.Errorf("load quarantine activity: %w", err)
+			}
+			dropQAct, err := billing.NewDropQuarantineActivity(restorer)
+			if err != nil {
+				return fmt.Errorf("drop quarantine activity: %w", err)
+			}
+			restoreDeps = &billing.RestoreDeps{
+				FetchManifest:   fetchAct,
+				VerifyChecksum:  verifyAct,
+				DownloadDecrypt: decAct,
+				LoadQuarantine:  loadAct,
+				DropQuarantine:  dropQAct,
+			}
+			logger.Info("billing restore deps wired", "scratch_dir", scratchDir)
+		}
+
+		billing.Bundle(partActivity, archiveDeps, restoreDeps).Apply(workerRegistrar{w})
 
 		// Outbox TTL expirer (#45, ADR-008): one Expirer per domain, dispatched
 		// by a single fan-out workflow on the same task queue.
