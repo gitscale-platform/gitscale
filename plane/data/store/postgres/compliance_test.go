@@ -55,6 +55,7 @@ func TestPostgresMetadataStoreCompliance(t *testing.T) {
 			"003_collaboration.sql", "004_ci.sql", "005_billing.sql",
 			"006_identity_revocation.sql",
 			"007_billing_partition_archives.sql",
+			"008_updated_at_triggers.sql",
 		} {
 			sql, err := os.ReadFile(filepath.Join(migrationsDir, f))
 			if err != nil {
