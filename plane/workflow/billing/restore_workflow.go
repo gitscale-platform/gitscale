@@ -78,7 +78,7 @@ func RestorePartitionWorkflow(ctx workflow.Context, in RestoreInput) (RestoreRes
 	fetchCtx := workflow.WithActivityOptions(ctx, shortOpts)
 	var manifest FetchManifestResult
 	if err := workflow.ExecuteActivity(fetchCtx, ActivityNameFetchManifest,
-		FetchManifestInput{Year: in.Year, Month: in.Month},
+		FetchManifestInput(in),
 	).Get(fetchCtx, &manifest); err != nil {
 		return RestoreResult{}, fmt.Errorf("restore: fetch manifest: %w", err)
 	}
@@ -127,7 +127,7 @@ func RestorePartitionWorkflow(ctx workflow.Context, in RestoreInput) (RestoreRes
 		// surface a compensation error — it would mask the root cause.
 		dropCtx := workflow.WithActivityOptions(ctx, shortOpts)
 		_ = workflow.ExecuteActivity(dropCtx, ActivityNameDropQuarantine,
-			DropQuarantineInput{Year: in.Year, Month: in.Month},
+			DropQuarantineInput(in),
 		).Get(dropCtx, nil)
 		return RestoreResult{}, fmt.Errorf("restore: load quarantine: %w", loadErr)
 	}
