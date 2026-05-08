@@ -85,20 +85,45 @@ func buildResource(cfg Config) (*resource.Resource, error) {
 	)
 }
 
-// TemporalInterceptor returns the interceptor slice consumed by both
-// client.Options.Interceptors and worker.Options.Interceptors. It must be
-// fed to both so spans created during activity scheduling propagate into
-// activity execution (Temporal contract).
-func TemporalInterceptor() []interceptor.ClientInterceptor {
+// newTracingInterceptor builds the OTel tracing interceptor against the
+// global TracerProvider. The same logical interceptor is applied to both
+// client.Options and worker.Options because Temporal does not inherit
+// client interceptors into the worker — spans created during activity
+// scheduling are otherwise dropped at the worker boundary.
+func newTracingInterceptor() interceptor.Interceptor {
 	intr, err := temporalotel.NewTracingInterceptor(temporalotel.TracerOptions{
 		Tracer: otel.GetTracerProvider().Tracer("workflow-worker"),
 	})
 	if err != nil {
-		// NewTracingInterceptor only errors on programmer mistake (e.g. nil
-		// tracer); the global provider always returns a real tracer here.
-		// Returning empty rather than panicking keeps the worker bootable
-		// even in the unlikely event the contract changes upstream.
+		// NewTracingInterceptor only errors on programmer mistake (e.g.
+		// nil tracer); the global provider always returns a real tracer
+		// here. Returning nil rather than panicking keeps the worker
+		// bootable if the contract changes upstream — both helpers below
+		// then return empty slices and tracing degrades to no-op.
+		return nil
+	}
+	return intr
+}
+
+// TemporalInterceptor returns the interceptor slice consumed by
+// client.Options.Interceptors. Use TemporalWorkerInterceptor for
+// worker.Options.Interceptors (different element type).
+func TemporalInterceptor() []interceptor.ClientInterceptor {
+	intr := newTracingInterceptor()
+	if intr == nil {
 		return nil
 	}
 	return []interceptor.ClientInterceptor{intr}
+}
+
+// TemporalWorkerInterceptor returns the interceptor slice consumed by
+// worker.Options.Interceptors. The element is the same interceptor shape
+// returned by TemporalInterceptor; the SDK requires distinct slice types
+// for client vs worker registration.
+func TemporalWorkerInterceptor() []interceptor.WorkerInterceptor {
+	intr := newTracingInterceptor()
+	if intr == nil {
+		return nil
+	}
+	return []interceptor.WorkerInterceptor{intr}
 }

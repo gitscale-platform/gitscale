@@ -49,10 +49,18 @@ func TestSetupTracing_BogusEndpointDoesNotPanic(t *testing.T) {
 	_ = shutdown(context.Background())
 }
 
-// TestTemporalInterceptor_NonEmpty asserts the interceptor slice contains
-// exactly one entry, which is what client.Options + worker.Options expect.
+// TestTemporalInterceptor_NonEmpty asserts the client interceptor slice
+// contains exactly one entry, which is what client.Options expects.
 func TestTemporalInterceptor_NonEmpty(t *testing.T) {
 	if got := observability.TemporalInterceptor(); len(got) != 1 {
-		t.Fatalf("expected 1 interceptor, got %d", len(got))
+		t.Fatalf("expected 1 client interceptor, got %d", len(got))
+	}
+}
+
+// TestTemporalWorkerInterceptor_NonEmpty asserts the worker interceptor
+// slice contains exactly one entry, which is what worker.Options expects.
+func TestTemporalWorkerInterceptor_NonEmpty(t *testing.T) {
+	if got := observability.TemporalWorkerInterceptor(); len(got) != 1 {
+		t.Fatalf("expected 1 worker interceptor, got %d", len(got))
 	}
 }
