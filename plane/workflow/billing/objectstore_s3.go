@@ -3,12 +3,14 @@ package billing
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // s3UploadPartSize is the multipart part size used by the transfermanager
@@ -60,6 +62,46 @@ func (s *S3ObjectStore) Upload(ctx context.Context, key string, r io.Reader, siz
 		return "", fmt.Errorf("s3: upload %s: %w", key, err)
 	}
 	return fmt.Sprintf("s3://%s/%s", s.bucket, key), nil
+}
+
+// GetBytes fetches a small object in full via GetObject, mapping NoSuchKey to
+// ErrObjectNotFound for non-retryable manifest-missing handling in restore.
+func (s *S3ObjectStore) GetBytes(ctx context.Context, key string) ([]byte, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var nsk *s3types.NoSuchKey
+		if errors.As(err, &nsk) {
+			return nil, fmt.Errorf("%w: %s", ErrObjectNotFound, key)
+		}
+		return nil, fmt.Errorf("s3: get %s: %w", key, err)
+	}
+	defer func() { _ = out.Body.Close() }()
+	data, err := io.ReadAll(out.Body)
+	if err != nil {
+		return nil, fmt.Errorf("s3: read %s: %w", key, err)
+	}
+	return data, nil
+}
+
+// Download streams an object via GetObject. The caller is responsible for
+// closing the returned reader; large encrypted parquet streams are consumed
+// chunk-by-chunk by the chunked-frame decoder.
+func (s *S3ObjectStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var nsk *s3types.NoSuchKey
+		if errors.As(err, &nsk) {
+			return nil, fmt.Errorf("%w: %s", ErrObjectNotFound, key)
+		}
+		return nil, fmt.Errorf("s3: get %s: %w", key, err)
+	}
+	return out.Body, nil
 }
 
 // PutBytes writes a small, in-memory object (manifest JSON, checksum file)
