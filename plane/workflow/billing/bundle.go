@@ -24,7 +24,7 @@ func Bundle(rollover *CreatePartitionActivity, archive *ArchiveDeps) gswf.Bundle
 		gswf.NamedActivity{Name: ActivityNameCreatePartition, Activity: rollover.Execute},
 	}
 	if archive != nil {
-		wfs = append(wfs, PartitionArchiveWorkflow)
+		wfs = append(wfs, PartitionArchiveWorkflow, ArchiveRouterWorkflow)
 		acts = append(acts,
 			gswf.NamedActivity{Name: ActivityNameDetachPartition, Activity: archive.Detach.Execute},
 			gswf.NamedActivity{Name: ActivityNameExport, Activity: archive.Export.Execute},
