@@ -92,7 +92,12 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 	if err != nil {
 		return ExportResult{}, fmt.Errorf("export: get dek: %w", err)
 	}
-	block, err := aes.NewCipher(dek)
+	defer func() {
+		for i := range dek.Bytes {
+			dek.Bytes[i] = 0
+		}
+	}()
+	block, err := aes.NewCipher(dek.Bytes)
 	if err != nil {
 		return ExportResult{}, fmt.Errorf("export: new cipher: %w", err)
 	}
@@ -230,7 +235,7 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 		SourcePartition: partitionName,
 		RowCount:        rowCount,
 		BytesWritten:    bytesWritten,
-		KEKHint:         "platform-billing-v1",
+		KEKHint:         dek.KEKHint,
 		EncFormat:       encFormatV1,
 		ArchiveTS:       time.Now().UTC().Format(time.RFC3339),
 		ChecksumAlg:     "sha256",
