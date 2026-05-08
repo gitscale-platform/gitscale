@@ -24,6 +24,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	BillingService_RecordPartitionArchived_FullMethodName = "/gitscale.billing.v1.BillingService/RecordPartitionArchived"
+	BillingService_RecordDEKDestroyed_FullMethodName      = "/gitscale.billing.v1.BillingService/RecordDEKDestroyed"
 )
 
 // BillingServiceClient is the client API for BillingService service.
@@ -37,6 +38,14 @@ type BillingServiceClient interface {
 	// monthly partition and emits billing.partition_archived to the outbox in
 	// the same Tx. Idempotent on (year, month, partition_name).
 	RecordPartitionArchived(ctx context.Context, in *RecordPartitionArchivedRequest, opts ...grpc.CallOption) (*RecordPartitionArchivedResponse, error)
+	// RecordDEKDestroyed emits billing.partition_dek_destroyed to the outbox
+	// for audit trail after the DEK destruction workflow (#80) successfully
+	// destroys a per-month Vault transit key version. The destruction itself
+	// is the source of truth — there is no source row to update; the outbox
+	// event is the only durable record that destruction occurred.
+	// Idempotent on (year, month, partition_name): repeated calls return the
+	// same event id and only the first call writes the outbox row.
+	RecordDEKDestroyed(ctx context.Context, in *RecordDEKDestroyedRequest, opts ...grpc.CallOption) (*RecordDEKDestroyedResponse, error)
 }
 
 type billingServiceClient struct {
@@ -57,6 +66,16 @@ func (c *billingServiceClient) RecordPartitionArchived(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *billingServiceClient) RecordDEKDestroyed(ctx context.Context, in *RecordDEKDestroyedRequest, opts ...grpc.CallOption) (*RecordDEKDestroyedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordDEKDestroyedResponse)
+	err := c.cc.Invoke(ctx, BillingService_RecordDEKDestroyed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BillingServiceServer is the server API for BillingService service.
 // All implementations must embed UnimplementedBillingServiceServer
 // for forward compatibility.
@@ -68,6 +87,14 @@ type BillingServiceServer interface {
 	// monthly partition and emits billing.partition_archived to the outbox in
 	// the same Tx. Idempotent on (year, month, partition_name).
 	RecordPartitionArchived(context.Context, *RecordPartitionArchivedRequest) (*RecordPartitionArchivedResponse, error)
+	// RecordDEKDestroyed emits billing.partition_dek_destroyed to the outbox
+	// for audit trail after the DEK destruction workflow (#80) successfully
+	// destroys a per-month Vault transit key version. The destruction itself
+	// is the source of truth — there is no source row to update; the outbox
+	// event is the only durable record that destruction occurred.
+	// Idempotent on (year, month, partition_name): repeated calls return the
+	// same event id and only the first call writes the outbox row.
+	RecordDEKDestroyed(context.Context, *RecordDEKDestroyedRequest) (*RecordDEKDestroyedResponse, error)
 	mustEmbedUnimplementedBillingServiceServer()
 }
 
@@ -80,6 +107,9 @@ type UnimplementedBillingServiceServer struct{}
 
 func (UnimplementedBillingServiceServer) RecordPartitionArchived(context.Context, *RecordPartitionArchivedRequest) (*RecordPartitionArchivedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecordPartitionArchived not implemented")
+}
+func (UnimplementedBillingServiceServer) RecordDEKDestroyed(context.Context, *RecordDEKDestroyedRequest) (*RecordDEKDestroyedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordDEKDestroyed not implemented")
 }
 func (UnimplementedBillingServiceServer) mustEmbedUnimplementedBillingServiceServer() {}
 func (UnimplementedBillingServiceServer) testEmbeddedByValue()                        {}
@@ -120,6 +150,24 @@ func _BillingService_RecordPartitionArchived_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BillingService_RecordDEKDestroyed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordDEKDestroyedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BillingServiceServer).RecordDEKDestroyed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BillingService_RecordDEKDestroyed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BillingServiceServer).RecordDEKDestroyed(ctx, req.(*RecordDEKDestroyedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BillingService_ServiceDesc is the grpc.ServiceDesc for BillingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -130,6 +178,10 @@ var BillingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RecordPartitionArchived",
 			Handler:    _BillingService_RecordPartitionArchived_Handler,
+		},
+		{
+			MethodName: "RecordDEKDestroyed",
+			Handler:    _BillingService_RecordDEKDestroyed_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

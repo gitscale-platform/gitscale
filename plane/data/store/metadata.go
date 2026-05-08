@@ -176,6 +176,18 @@ type BillingReader interface {
 	// GetPartitionArchiveByKey returns the row matching the natural key
 	// (year, month, partition_name) or (nil, nil) when no row exists.
 	GetPartitionArchiveByKey(ctx context.Context, year, month int, partitionName string) (*PartitionArchive, error)
+
+	// ListPartitionArchivesArchivedBefore returns archive rows with
+	// archived_at strictly less than cutoff, sorted by (year, month, id)
+	// for deterministic workflow iteration. Used by the DEK destruction
+	// workflow (#80) to enumerate eligible partitions.
+	ListPartitionArchivesArchivedBefore(ctx context.Context, cutoff time.Time) ([]PartitionArchive, error)
+
+	// HasOutboxEventForAggregate returns true when an outbox row already
+	// exists for (eventType, aggregateID). Used to anchor idempotency for
+	// outbox-only events (e.g. billing.partition_dek_destroyed) that have
+	// no source row to UNIQUE-key against.
+	HasOutboxEventForAggregate(ctx context.Context, eventType string, aggregateID uuid.UUID) (bool, error)
 }
 
 // BillingWriter exposes write operations against the billing domain.

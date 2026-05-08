@@ -3,6 +3,8 @@ package stub
 import (
 	"context"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/store"
 	"github.com/google/uuid"
@@ -36,6 +38,43 @@ func (r *stubBillingReader) GetPartitionArchiveByKey(_ context.Context, year, mo
 	return &cp, nil
 }
 
+// ListPartitionArchivesArchivedBefore returns committed archive rows older
+// than cutoff, sorted to mirror the postgres impl's ORDER BY year, month, id.
+func (r *stubBillingReader) ListPartitionArchivesArchivedBefore(_ context.Context, cutoff time.Time) ([]store.PartitionArchive, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	var out []store.PartitionArchive
+	for _, pa := range r.store.partitionArchives {
+		if pa.ArchivedAt.Before(cutoff) {
+			out = append(out, pa)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Year != out[j].Year {
+			return out[i].Year < out[j].Year
+		}
+		if out[i].Month != out[j].Month {
+			return out[i].Month < out[j].Month
+		}
+		return out[i].ID.String() < out[j].ID.String()
+	})
+	return out, nil
+}
+
+// HasOutboxEventForAggregate consults committed outbox records. Mirrors the
+// postgres impl's WHERE event_type=$1 AND aggregate_id=$2 query. Pending
+// (uncommitted) writes are checked separately by stubBillingWriter.
+func (r *stubBillingReader) HasOutboxEventForAggregate(_ context.Context, eventType string, aggregateID uuid.UUID) (bool, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	for _, ev := range r.store.outbox {
+		if ev.Domain == store.DomainBilling && ev.EventType == eventType && ev.AggregateID == aggregateID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // Billing returns the billing writer scoped to this Tx. Pending writes are
 // only made visible on commit; reads consult both pending and committed maps.
 func (t *stubTx) Billing() store.BillingWriter {
@@ -51,6 +90,45 @@ func (w *stubBillingWriter) lazyInit() {
 	if w.tx.pendingPartitionArchives == nil {
 		w.tx.pendingPartitionArchives = make(map[string]store.PartitionArchive)
 	}
+}
+
+// ListPartitionArchivesArchivedBefore consults pending writes first, then
+// falls back to committed state. Sort order matches the reader's.
+func (w *stubBillingWriter) ListPartitionArchivesArchivedBefore(ctx context.Context, cutoff time.Time) ([]store.PartitionArchive, error) {
+	committed, err := w.reader.ListPartitionArchivesArchivedBefore(ctx, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	if w.tx.pendingPartitionArchives == nil {
+		return committed, nil
+	}
+	merged := append([]store.PartitionArchive(nil), committed...)
+	for _, pa := range w.tx.pendingPartitionArchives {
+		if pa.ArchivedAt.Before(cutoff) {
+			merged = append(merged, pa)
+		}
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		if merged[i].Year != merged[j].Year {
+			return merged[i].Year < merged[j].Year
+		}
+		if merged[i].Month != merged[j].Month {
+			return merged[i].Month < merged[j].Month
+		}
+		return merged[i].ID.String() < merged[j].ID.String()
+	})
+	return merged, nil
+}
+
+// HasOutboxEventForAggregate checks pending Tx writes first, then committed
+// outbox state. The pending check uses the same filter as the postgres impl.
+func (w *stubBillingWriter) HasOutboxEventForAggregate(ctx context.Context, eventType string, aggregateID uuid.UUID) (bool, error) {
+	for _, ev := range w.tx.pendingOutbox {
+		if ev.Domain == store.DomainBilling && ev.EventType == eventType && ev.AggregateID == aggregateID {
+			return true, nil
+		}
+	}
+	return w.reader.HasOutboxEventForAggregate(ctx, eventType, aggregateID)
 }
 
 func (w *stubBillingWriter) GetPartitionArchiveByKey(ctx context.Context, year, month int, partitionName string) (*store.PartitionArchive, error) {

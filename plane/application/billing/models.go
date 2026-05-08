@@ -24,3 +24,24 @@ type RecordPartitionArchivedOutput struct {
 	ArchiveID string // UUID stringified
 	Created   bool
 }
+
+// RecordDEKDestroyedInput is the service-level input recording an irreversible
+// per-month DEK destruction (#80). KEKHint is the manifest hint
+// ("platform-billing-v<N>") and VaultKeyVersion is the parsed numeric N.
+// PartitionName mirrors billing.partition_archives.partition_name for the
+// row whose ciphertext is now unrecoverable.
+type RecordDEKDestroyedInput struct {
+	Year            int
+	Month           int
+	PartitionName   string
+	KEKHint         string
+	VaultKeyVersion int
+}
+
+// RecordDEKDestroyedOutput is the service-level output. Created is false on
+// idempotent retry (the outbox row for this (year,month,partition_name,
+// kek_hint) tuple was already emitted).
+type RecordDEKDestroyedOutput struct {
+	EventID string // UUID stringified
+	Created bool
+}

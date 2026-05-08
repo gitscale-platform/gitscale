@@ -37,3 +37,18 @@ func (g *grpcBillingClient) RecordPartitionArchived(ctx context.Context, in Part
 	})
 	return err
 }
+
+// RecordDEKDestroyed calls into the billing app-plane service to emit
+// billing.partition_dek_destroyed. Idempotent retries return nil; only the
+// first call writes the outbox row (anchored on the deterministic UUIDv5
+// aggregate_id derived from the natural key).
+func (g *grpcBillingClient) RecordDEKDestroyed(ctx context.Context, in DEKDestroyedInput) error {
+	_, err := g.c.RecordDEKDestroyed(ctx, &billingv1.RecordDEKDestroyedRequest{
+		Year:            int32(in.Year),
+		Month:           int32(in.Month),
+		PartitionName:   in.PartitionName,
+		KekHint:         in.KEKHint,
+		VaultKeyVersion: int32(in.VaultKeyVersion),
+	})
+	return err
+}
