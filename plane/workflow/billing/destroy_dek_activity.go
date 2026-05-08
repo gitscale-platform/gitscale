@@ -125,11 +125,18 @@ func (a *DestroyDEKActivity) Execute(ctx context.Context, in DestroyDEKInput) (D
 		return DestroyDEKResult{VaultKeyVersion: version}, nil
 	}
 
-	// Step 1: raise min_decryption_version above the target. Trim refuses to
-	// run unless min_available_version <= min_decryption_version. We bump it
-	// to version+1 so trim can advance to version+1.
+	// Step 1: raise min_decryption_version AND min_encryption_version above
+	// the target. Vault enforces min_available_version <= min(
+	// min_encryption_version, min_decryption_version); trim returns 400
+	// "minimum available version cannot be set when minimum encryption
+	// version is not set" if min_encryption_version is left at zero. Bumping
+	// both to version+1 is safe: the workflow iterates ascending (year,
+	// month) so older DEK versions are always destroyed before newer ones,
+	// and live encryption operations transparently use the latest key
+	// version regardless.
 	if _, err := a.logical.WriteWithContext(ctx, configPath, map[string]any{
 		"min_decryption_version": version + 1,
+		"min_encryption_version": version + 1,
 	}); err != nil {
 		return DestroyDEKResult{}, fmt.Errorf("destroy dek: config %s: %w", configPath, err)
 	}

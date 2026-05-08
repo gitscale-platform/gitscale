@@ -68,6 +68,9 @@ func TestDestroyDEKActivity_HappyPath_BumpsAndTrims(t *testing.T) {
 	if fake.writeCalls[0].data["min_decryption_version"] != 4 {
 		t.Errorf("min_decryption_version=%v want 4", fake.writeCalls[0].data["min_decryption_version"])
 	}
+	if fake.writeCalls[0].data["min_encryption_version"] != 4 {
+		t.Errorf("min_encryption_version=%v want 4", fake.writeCalls[0].data["min_encryption_version"])
+	}
 	if fake.writeCalls[1].path != "transit/keys/platform-billing-master/trim" {
 		t.Errorf("second write path=%q", fake.writeCalls[1].path)
 	}
