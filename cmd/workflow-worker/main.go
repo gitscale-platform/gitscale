@@ -36,6 +36,7 @@ import (
 	"github.com/gitscale-platform/gitscale/plane/data/outbox"
 	"github.com/gitscale-platform/gitscale/plane/data/store"
 	billingstore "github.com/gitscale-platform/gitscale/plane/data/store/billing"
+	pgstore "github.com/gitscale-platform/gitscale/plane/data/store/postgres"
 	gswf "github.com/gitscale-platform/gitscale/plane/workflow"
 	"github.com/gitscale-platform/gitscale/plane/workflow/appclient"
 	"github.com/gitscale-platform/gitscale/plane/workflow/billing"
@@ -295,7 +296,67 @@ func run(logger *slog.Logger) error {
 			logger.Info("billing restore deps wired", "scratch_dir", scratchDir)
 		}
 
-		billing.Bundle(partActivity, archiveDeps, restoreDeps).Apply(workerRegistrar{w})
+		// DEKDestructionDeps wiring (#80, ADR-018 §Encryption + ADR-015).
+		// Only wired when archive deps are present (it depends on the same
+		// Vault + S3 + billing-service surfaces). Operator approval is
+		// stubbed with auto-approve until ADR-015 wiring lands; legal-hold
+		// uses a static-not-held checker until S3 Object Lock integration
+		// ships. Both gaps are documented in the runbook.
+		var dekDeps *billing.DEKDestructionDeps
+		if archiveDeps != nil {
+			vaultClient, err := billing.LoadVaultClientFromEnv()
+			if err != nil {
+				return fmt.Errorf("vault client (dek destroy): %w", err)
+			}
+			destroy, err := billing.NewDestroyDEKActivity(vaultClient,
+				envDefault("VAULT_TRANSIT_MOUNT", ""),
+				envDefault("VAULT_BILLING_KEY", ""),
+			)
+			if err != nil {
+				return fmt.Errorf("destroy dek activity: %w", err)
+			}
+
+			s3Ctx2, cancelS3b := context.WithTimeout(context.Background(), 10*time.Second)
+			s3client, err := buildS3ClientFromEnv(s3Ctx2)
+			cancelS3b()
+			if err != nil {
+				return fmt.Errorf("s3 client (dek destroy): %w", err)
+			}
+			dekObjStore := billing.NewS3ObjectStore(s3client, os.Getenv("S3_BUCKET"))
+			resolver, err := billing.NewManifestKEKHintResolver(dekObjStore, os.Getenv("S3_BUCKET"))
+			if err != nil {
+				return fmt.Errorf("manifest resolver: %w", err)
+			}
+			ms := pgstore.New(pool)
+			listAct, err := billing.NewListEligiblePartitionsActivity(ms, resolver)
+			if err != nil {
+				return fmt.Errorf("list eligible partitions activity: %w", err)
+			}
+			holdAct, err := billing.NewCheckLegalHoldActivity(billing.NewStaticLegalHoldChecker(false, ""))
+			if err != nil {
+				return fmt.Errorf("legal hold activity: %w", err)
+			}
+			approvalAct := billing.NewRequestOperatorApprovalActivity(billing.NewAutoApproveStub())
+
+			billingClient := appclient.NewGRPCBillingClient(billingConn)
+			emitDEK, err := billing.NewEmitDEKDestroyedActivity(billingClient)
+			if err != nil {
+				return fmt.Errorf("emit dek destroyed activity: %w", err)
+			}
+			dekDeps = &billing.DEKDestructionDeps{
+				List:      listAct,
+				LegalHold: holdAct,
+				Approval:  approvalAct,
+				Destroy:   destroy,
+				Emit:      emitDEK,
+			}
+			logger.Info("billing dek-destruction deps wired",
+				"bucket", os.Getenv("S3_BUCKET"))
+		} else {
+			logger.Info("archive deps absent; skipping DEK-destruction deps + schedule")
+		}
+
+		billing.Bundle(partActivity, archiveDeps, restoreDeps, dekDeps).Apply(workerRegistrar{w})
 
 		// Outbox TTL expirer (#45, ADR-008): one Expirer per domain, dispatched
 		// by a single fan-out workflow on the same task queue.
@@ -334,6 +395,21 @@ func run(logger *slog.Logger) error {
 			logger.Info("billing partition-archive registered",
 				"schedule_id", billing.ArchiveScheduleID,
 				"cron", billing.ArchiveCronExpression)
+		}
+
+		// Register / converge the monthly DEK destruction schedule when the
+		// DEK deps are wired (#80, ADR-018 §Encryption). Schedule targets
+		// DEKDestructionRouterWorkflow which computes the cutoff at fire time.
+		if dekDeps != nil {
+			ctxDEK, cancelDEK := context.WithTimeout(context.Background(), 10*time.Second)
+			_, err = billing.EnsureDEKDestructionSchedule(ctxDEK, c.ScheduleClient())
+			cancelDEK()
+			if err != nil {
+				return fmt.Errorf("billing.EnsureDEKDestructionSchedule: %w", err)
+			}
+			logger.Info("billing dek-destruction registered",
+				"schedule_id", billing.DEKDestructionScheduleID,
+				"cron", billing.DEKDestructionCronExpression)
 		}
 	} else {
 		logger.Info("POSTGRES_URL unset; skipping billing.Bundle + rollover schedule")

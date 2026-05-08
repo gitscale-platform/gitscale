@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/store"
 	"github.com/google/uuid"
@@ -34,6 +35,57 @@ func (r *billingReader) GetPartitionArchiveByKey(ctx context.Context, year, mont
 		return nil, fmt.Errorf("postgres: GetPartitionArchiveByKey: %w", err)
 	}
 	return &pa, nil
+}
+
+// ListPartitionArchivesArchivedBefore enumerates partition_archives older
+// than cutoff for the DEK destruction workflow (#80). Sorted by (year, month,
+// id) for deterministic workflow iteration.
+func (r *billingReader) ListPartitionArchivesArchivedBefore(ctx context.Context, cutoff time.Time) ([]store.PartitionArchive, error) {
+	const q = `
+		SELECT id, year, month, partition_name, lake_uri,
+		       row_count, bytes_written, archived_at
+		FROM billing.partition_archives
+		WHERE archived_at < $1
+		ORDER BY year ASC, month ASC, id ASC`
+	rows, err := r.q.Query(ctx, q, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListPartitionArchivesArchivedBefore: %w", err)
+	}
+	defer rows.Close()
+	var out []store.PartitionArchive
+	for rows.Next() {
+		var pa store.PartitionArchive
+		if err := rows.Scan(
+			&pa.ID, &pa.Year, &pa.Month, &pa.PartitionName, &pa.LakeURI,
+			&pa.RowCount, &pa.BytesWritten, &pa.ArchivedAt,
+		); err != nil {
+			return nil, fmt.Errorf("postgres: ListPartitionArchivesArchivedBefore scan: %w", err)
+		}
+		out = append(out, pa)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgres: ListPartitionArchivesArchivedBefore rows: %w", err)
+	}
+	return out, nil
+}
+
+// HasOutboxEventForAggregate consults billing.billing_outbox for an existing
+// row keyed by (event_type, aggregate_id). Used by the DEK destruction
+// workflow (#80) to make outbox writes idempotent without a source row.
+func (r *billingReader) HasOutboxEventForAggregate(ctx context.Context, eventType string, aggregateID uuid.UUID) (bool, error) {
+	const q = `
+		SELECT 1 FROM billing.billing_outbox
+		WHERE event_type = $1 AND aggregate_id = $2
+		LIMIT 1`
+	var dummy int
+	err := r.q.QueryRow(ctx, q, eventType, aggregateID).Scan(&dummy)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("postgres: HasOutboxEventForAggregate: %w", err)
+	}
+	return true, nil
 }
 
 // billingWriter embeds billingReader and adds Tx-only mutations.

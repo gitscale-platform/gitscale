@@ -161,6 +161,134 @@ func (x *RecordPartitionArchivedResponse) GetCreated() bool {
 	return false
 }
 
+type RecordDEKDestroyedRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Year            int32                  `protobuf:"varint,1,opt,name=year,proto3" json:"year,omitempty"`                                                // 2026..2100
+	Month           int32                  `protobuf:"varint,2,opt,name=month,proto3" json:"month,omitempty"`                                              // 1..12
+	PartitionName   string                 `protobuf:"bytes,3,opt,name=partition_name,json=partitionName,proto3" json:"partition_name,omitempty"`          // matching billing.partition_archives row
+	KekHint         string                 `protobuf:"bytes,4,opt,name=kek_hint,json=kekHint,proto3" json:"kek_hint,omitempty"`                            // e.g. "platform-billing-v3" — destroyed Vault key version
+	VaultKeyVersion int32                  `protobuf:"varint,5,opt,name=vault_key_version,json=vaultKeyVersion,proto3" json:"vault_key_version,omitempty"` // numeric N parsed from kek_hint
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RecordDEKDestroyedRequest) Reset() {
+	*x = RecordDEKDestroyedRequest{}
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDEKDestroyedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDEKDestroyedRequest) ProtoMessage() {}
+
+func (x *RecordDEKDestroyedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDEKDestroyedRequest.ProtoReflect.Descriptor instead.
+func (*RecordDEKDestroyedRequest) Descriptor() ([]byte, []int) {
+	return file_gitscale_billing_v1_billing_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RecordDEKDestroyedRequest) GetYear() int32 {
+	if x != nil {
+		return x.Year
+	}
+	return 0
+}
+
+func (x *RecordDEKDestroyedRequest) GetMonth() int32 {
+	if x != nil {
+		return x.Month
+	}
+	return 0
+}
+
+func (x *RecordDEKDestroyedRequest) GetPartitionName() string {
+	if x != nil {
+		return x.PartitionName
+	}
+	return ""
+}
+
+func (x *RecordDEKDestroyedRequest) GetKekHint() string {
+	if x != nil {
+		return x.KekHint
+	}
+	return ""
+}
+
+func (x *RecordDEKDestroyedRequest) GetVaultKeyVersion() int32 {
+	if x != nil {
+		return x.VaultKeyVersion
+	}
+	return 0
+}
+
+type RecordDEKDestroyedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // UUID of outbox event row
+	Created       bool                   `protobuf:"varint,2,opt,name=created,proto3" json:"created,omitempty"`               // false on idempotent retry (event already emitted)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordDEKDestroyedResponse) Reset() {
+	*x = RecordDEKDestroyedResponse{}
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDEKDestroyedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDEKDestroyedResponse) ProtoMessage() {}
+
+func (x *RecordDEKDestroyedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDEKDestroyedResponse.ProtoReflect.Descriptor instead.
+func (*RecordDEKDestroyedResponse) Descriptor() ([]byte, []int) {
+	return file_gitscale_billing_v1_billing_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RecordDEKDestroyedResponse) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *RecordDEKDestroyedResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
 var File_gitscale_billing_v1_billing_proto protoreflect.FileDescriptor
 
 const file_gitscale_billing_v1_billing_proto_rawDesc = "" +
@@ -176,9 +304,19 @@ const file_gitscale_billing_v1_billing_proto_rawDesc = "" +
 	"\x1fRecordPartitionArchivedResponse\x12\x1d\n" +
 	"\n" +
 	"archive_id\x18\x01 \x01(\tR\tarchiveId\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated2\x97\x01\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xb3\x01\n" +
+	"\x19RecordDEKDestroyedRequest\x12\x12\n" +
+	"\x04year\x18\x01 \x01(\x05R\x04year\x12\x14\n" +
+	"\x05month\x18\x02 \x01(\x05R\x05month\x12%\n" +
+	"\x0epartition_name\x18\x03 \x01(\tR\rpartitionName\x12\x19\n" +
+	"\bkek_hint\x18\x04 \x01(\tR\akekHint\x12*\n" +
+	"\x11vault_key_version\x18\x05 \x01(\x05R\x0fvaultKeyVersion\"Q\n" +
+	"\x1aRecordDEKDestroyedResponse\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x18\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated2\x8e\x02\n" +
 	"\x0eBillingService\x12\x84\x01\n" +
-	"\x17RecordPartitionArchived\x123.gitscale.billing.v1.RecordPartitionArchivedRequest\x1a4.gitscale.billing.v1.RecordPartitionArchivedResponseB\xe0\x01\n" +
+	"\x17RecordPartitionArchived\x123.gitscale.billing.v1.RecordPartitionArchivedRequest\x1a4.gitscale.billing.v1.RecordPartitionArchivedResponse\x12u\n" +
+	"\x12RecordDEKDestroyed\x12..gitscale.billing.v1.RecordDEKDestroyedRequest\x1a/.gitscale.billing.v1.RecordDEKDestroyedResponseB\xe0\x01\n" +
 	"\x17com.gitscale.billing.v1B\fBillingProtoP\x01ZIgithub.com/gitscale-platform/gitscale/internal/proto/billing/v1;billingv1\xa2\x02\x03GBX\xaa\x02\x13Gitscale.Billing.V1\xca\x02\x13Gitscale\\Billing\\V1\xe2\x02\x1fGitscale\\Billing\\V1\\GPBMetadata\xea\x02\x15Gitscale::Billing::V1b\x06proto3"
 
 var (
@@ -193,16 +331,20 @@ func file_gitscale_billing_v1_billing_proto_rawDescGZIP() []byte {
 	return file_gitscale_billing_v1_billing_proto_rawDescData
 }
 
-var file_gitscale_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_gitscale_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_gitscale_billing_v1_billing_proto_goTypes = []any{
 	(*RecordPartitionArchivedRequest)(nil),  // 0: gitscale.billing.v1.RecordPartitionArchivedRequest
 	(*RecordPartitionArchivedResponse)(nil), // 1: gitscale.billing.v1.RecordPartitionArchivedResponse
+	(*RecordDEKDestroyedRequest)(nil),       // 2: gitscale.billing.v1.RecordDEKDestroyedRequest
+	(*RecordDEKDestroyedResponse)(nil),      // 3: gitscale.billing.v1.RecordDEKDestroyedResponse
 }
 var file_gitscale_billing_v1_billing_proto_depIdxs = []int32{
 	0, // 0: gitscale.billing.v1.BillingService.RecordPartitionArchived:input_type -> gitscale.billing.v1.RecordPartitionArchivedRequest
-	1, // 1: gitscale.billing.v1.BillingService.RecordPartitionArchived:output_type -> gitscale.billing.v1.RecordPartitionArchivedResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: gitscale.billing.v1.BillingService.RecordDEKDestroyed:input_type -> gitscale.billing.v1.RecordDEKDestroyedRequest
+	1, // 2: gitscale.billing.v1.BillingService.RecordPartitionArchived:output_type -> gitscale.billing.v1.RecordPartitionArchivedResponse
+	3, // 3: gitscale.billing.v1.BillingService.RecordDEKDestroyed:output_type -> gitscale.billing.v1.RecordDEKDestroyedResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -219,7 +361,7 @@ func file_gitscale_billing_v1_billing_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gitscale_billing_v1_billing_proto_rawDesc), len(file_gitscale_billing_v1_billing_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

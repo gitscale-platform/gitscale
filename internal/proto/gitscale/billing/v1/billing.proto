@@ -15,6 +15,16 @@ service BillingService {
   // the same Tx. Idempotent on (year, month, partition_name).
   rpc RecordPartitionArchived(RecordPartitionArchivedRequest)
       returns (RecordPartitionArchivedResponse);
+
+  // RecordDEKDestroyed emits billing.partition_dek_destroyed to the outbox
+  // for audit trail after the DEK destruction workflow (#80) successfully
+  // destroys a per-month Vault transit key version. The destruction itself
+  // is the source of truth — there is no source row to update; the outbox
+  // event is the only durable record that destruction occurred.
+  // Idempotent on (year, month, partition_name): repeated calls return the
+  // same event id and only the first call writes the outbox row.
+  rpc RecordDEKDestroyed(RecordDEKDestroyedRequest)
+      returns (RecordDEKDestroyedResponse);
 }
 
 message RecordPartitionArchivedRequest {
@@ -29,4 +39,17 @@ message RecordPartitionArchivedRequest {
 message RecordPartitionArchivedResponse {
   string archive_id = 1;  // UUID of partition_archives row (new or existing)
   bool   created    = 2;  // false on idempotent retry
+}
+
+message RecordDEKDestroyedRequest {
+  int32  year             = 1;  // 2026..2100
+  int32  month            = 2;  // 1..12
+  string partition_name   = 3;  // matching billing.partition_archives row
+  string kek_hint         = 4;  // e.g. "platform-billing-v3" — destroyed Vault key version
+  int32  vault_key_version = 5; // numeric N parsed from kek_hint
+}
+
+message RecordDEKDestroyedResponse {
+  string event_id = 1;  // UUID of outbox event row
+  bool   created  = 2;  // false on idempotent retry (event already emitted)
 }

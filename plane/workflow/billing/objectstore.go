@@ -23,7 +23,8 @@ type ObjectStore interface {
 	PutBytes(ctx context.Context, key string, data []byte) error
 
 	// GetBytes reads a small object in full (manifest, checksum). Errors with
-	// ErrObjectNotFound (or wraps it) when the object is absent.
+	// ErrObjectNotFound (or wraps it) when the object is absent. Used by the
+	// restore workflow (#79) and the DEK destruction workflow (#80).
 	GetBytes(ctx context.Context, key string) ([]byte, error)
 
 	// Download returns a streaming reader over key for large blobs. The caller

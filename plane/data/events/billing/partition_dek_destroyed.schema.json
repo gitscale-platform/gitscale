@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/billing/partition_dek_destroyed.schema.json",
+  "title": "billing.partition_dek_destroyed",
+  "description": "Emitted after the DEK destruction workflow (#80) crypto-shreds a per-month Vault transit key version. ADR-018 §Encryption: irreversible. The outbox event is the only durable record — there is no source row update. Idempotent on (year, month, partition_name, kek_hint).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "year",
+    "month",
+    "partition_name",
+    "kek_hint",
+    "vault_key_version",
+    "destroyed_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "year": {
+      "type": "integer",
+      "minimum": 2026,
+      "maximum": 2100
+    },
+    "month": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12
+    },
+    "partition_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kek_hint": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^platform-billing-v[0-9]+$"
+    },
+    "vault_key_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "destroyed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}

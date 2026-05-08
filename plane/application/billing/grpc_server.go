@@ -43,6 +43,25 @@ func (s *GRPCServer) RecordPartitionArchived(ctx context.Context, req *billingv1
 	}, nil
 }
 
+// RecordDEKDestroyed translates the proto request into the service-level
+// input and maps domain errors to the documented gRPC code surface.
+func (s *GRPCServer) RecordDEKDestroyed(ctx context.Context, req *billingv1.RecordDEKDestroyedRequest) (*billingv1.RecordDEKDestroyedResponse, error) {
+	out, err := s.svc.RecordDEKDestroyed(ctx, RecordDEKDestroyedInput{
+		Year:            int(req.GetYear()),
+		Month:           int(req.GetMonth()),
+		PartitionName:   req.GetPartitionName(),
+		KEKHint:         req.GetKekHint(),
+		VaultKeyVersion: int(req.GetVaultKeyVersion()),
+	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return &billingv1.RecordDEKDestroyedResponse{
+		EventId: out.EventID,
+		Created: out.Created,
+	}, nil
+}
+
 // mapErr converts a billing domain error into a gRPC status. Validation
 // failures map to InvalidArgument; unknown errors are reported as Internal.
 func mapErr(err error) error {
@@ -51,7 +70,9 @@ func mapErr(err error) error {
 		errors.Is(err, ErrInvalidMonth),
 		errors.Is(err, ErrEmptyPartitionName),
 		errors.Is(err, ErrEmptyLakeURI),
-		errors.Is(err, ErrNegativeCount):
+		errors.Is(err, ErrNegativeCount),
+		errors.Is(err, ErrEmptyKEKHint),
+		errors.Is(err, ErrInvalidKeyVersion):
 		return status.Error(codes.InvalidArgument, err.Error())
 	default:
 		return status.Error(codes.Internal, err.Error())
