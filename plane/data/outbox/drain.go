@@ -45,9 +45,9 @@ func drainBatch(ctx context.Context, cfg Config) (drainResult, int, error) {
 		_ = tx.Rollback(ctx)
 	}()
 
-	// Step 1: sample oldest-unprocessed for SLO gauge — always, even if we
+	// Step 1: sample high-water lag for SLO gauge — always, even if we
 	// don't win the lock, so the metric does not drop during leadership rotation.
-	sampleOldestUnprocessed(ctx, cfg.DB, cfg)
+	sampleHighWaterLag(ctx, cfg.DB, cfg)
 
 	// Step 2: advisory lock — transaction-scoped.
 	// hashtext($1) produces a stable int4; ::bigint casts to the (bigint)
@@ -155,10 +155,12 @@ func drainBatch(ctx context.Context, cfg Config) (drainResult, int, error) {
 	return resultOK, updated, nil
 }
 
-// sampleOldestUnprocessed queries the minimum created_at of unprocessed rows
+// sampleHighWaterLag queries the minimum created_at of unprocessed rows
 // and sets the SLO gauge. Called at every poll cycle, regardless of whether
-// this replica holds the advisory lock (spec §12).
-func sampleOldestUnprocessed(ctx context.Context, db *pgxpool.Pool, cfg Config) {
+// this replica holds the advisory lock (spec §12). Tracks ADR-008's
+// high-water mark — the time horizon up to which every outbox row has been
+// published to Kafka.
+func sampleHighWaterLag(ctx context.Context, db *pgxpool.Pool, cfg Config) {
 	//nolint:gosec // table comes from internal config
 	q := fmt.Sprintf(
 		`SELECT EXTRACT(EPOCH FROM (now() - MIN(created_at)))
@@ -172,10 +174,10 @@ func sampleOldestUnprocessed(ctx context.Context, db *pgxpool.Pool, cfg Config) 
 		return
 	}
 	if ageSeconds == nil {
-		cfg.Metrics.setOldestUnprocessed(0)
+		cfg.Metrics.setHighWaterLag(0)
 		return
 	}
-	cfg.Metrics.setOldestUnprocessed(*ageSeconds)
+	cfg.Metrics.setHighWaterLag(*ageSeconds)
 }
 
 // scanRows converts pgx.Rows into a slice of OutboxRow.
