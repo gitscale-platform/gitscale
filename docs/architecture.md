@@ -677,6 +677,12 @@ Consequences: <positive, negative, follow-ups>
 
   Workflow plane reads MAY use `plane/data/store` interfaces directly via the activity adapter. Pure-DDL maintenance activities (e.g. partition rollover) MAY use `MetadataStore` directly, because the operation has no outbox row and no domain invariant.
 
+  **Boundary clarification (amended 2026-05-08, issue #81):** the read/DDL carve-out permits `plane/workflow/<domain>/` to *import* `plane/data/store/<domain>` interface and read-side row types in-process — no obligation to redeclare the interface inside the workflow plane. The carve-out is bounded by three guardrails:
+
+  1. Imports are permitted only for (a) interfaces whose methods are pure-DDL (`CREATE`, `ALTER`, `DROP`, `DETACH`, `ATTACH PARTITION`) or read-only (`SELECT` / cursor scans), and (b) row/result structs consumed read-side.
+  2. The moment a workflow activity needs to call a method that emits an outbox row or updates a domain aggregate, the import must be removed from `plane/workflow/<domain>/` and the call routed through `plane/workflow/appclient/` → `plane/application/<domain>/`.
+  3. A static check (`go test ./internal/architecture/...` or equivalent lint) asserts no method named `Transact*`, `WriteOutbox*`, `Insert*`, `Update*`, `Delete*` is reachable from `plane/workflow/*` via `plane/data/store/*`. The rule is enforced; the carve-out is not a blanket pass.
+
   No workflow activity writes more than one domain's outbox row in a single execution. Cross-domain workflows compose per-domain saga steps with explicit compensation activities.
 
 - **Consequences:** Domain invariants live in the application plane only. Auth and audit context is uniform — the application plane stamps `actor_id`, `principal_kind`, `rate_bucket` on every outbox payload; a workflow activity has no human principal and routes through the app plane for a clear audit trail (`actor_kind=service`). Single-writer per aggregate keeps schema migrations sane. Workflow tests gain a clean stub surface. Latency cost: one network hop per write activity (acceptable; Temporal activities are async and retry-tolerant). Pure-DDL exception is narrow: `CreatePartition` writes no row, emits no outbox, has no invariant. Cross-domain saga rule prevents distributed-Tx patterns: two-phase commit across domain outbox tables is forbidden; cross-domain workflows compose per-domain saga steps with explicit compensation.
