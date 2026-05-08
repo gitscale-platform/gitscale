@@ -32,3 +32,23 @@ proto:
 
 install-hooks:
 	git config core.hooksPath .githooks
+
+.PHONY: temporal-up temporal-down vault-up vault-down workflow-stack-up workflow-stack-down
+
+temporal-up:
+	docker compose up -d temporal temporal-ui
+
+temporal-down:
+	docker compose stop temporal temporal-ui
+
+vault-up:
+	docker compose up -d vault
+
+vault-down:
+	docker compose stop vault
+
+workflow-stack-up:
+	docker compose up -d postgres redis temporal vault
+
+workflow-stack-down:
+	docker compose stop temporal temporal-ui vault
