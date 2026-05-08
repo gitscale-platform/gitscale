@@ -112,7 +112,7 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 	rowCountCh := make(chan int64, 1)
 	writeErrCh := make(chan error, 1)
 	go func() {
-		defer cursor.Close()
+		defer func() { _ = cursor.Close() }()
 		pw := parquet.NewGenericWriter[billingstore.UsageEventRow](plaintextW)
 		var rows int64
 		for cursor.Next(ctx) {
@@ -140,7 +140,7 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 			writeErrCh <- cerr
 			return
 		}
-		plaintextW.Close()
+		_ = plaintextW.Close()
 		rowCountCh <- rows
 		writeErrCh <- nil
 	}()
@@ -154,7 +154,7 @@ func (a *ExportActivity) Execute(ctx context.Context, in ExportInput) (ExportRes
 		// AEAD AAD: "<partition_name>:<chunk_index>" — binds chunk to source partition
 		//   and prevents cross-file splicing. RestorePartition recomputes AAD on decode.
 		// Format identifier: "aes-256-gcm-v1-4mib" (see manifest.enc_format).
-		defer cipherW.Close()
+		defer func() { _ = cipherW.Close() }()
 		buf := make([]byte, 4<<20) // 4 MiB
 		var chunkIndex uint64
 		for {

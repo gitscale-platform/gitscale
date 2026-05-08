@@ -39,7 +39,7 @@ func TestStubArchiver_ScanRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cur.Close()
+	defer func() { _ = cur.Close() }()
 
 	var count int
 	for cur.Next(ctx) {
