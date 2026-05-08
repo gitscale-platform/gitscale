@@ -65,7 +65,8 @@ func (s *S3ObjectStore) Upload(ctx context.Context, key string, r io.Reader, siz
 }
 
 // GetBytes fetches a small object in full via GetObject, mapping NoSuchKey to
-// ErrObjectNotFound for non-retryable manifest-missing handling in restore.
+// ErrObjectNotFound for non-retryable manifest-missing handling in restore
+// (#79) and the DEK destruction workflow (#80).
 func (s *S3ObjectStore) GetBytes(ctx context.Context, key string) ([]byte, error) {
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
