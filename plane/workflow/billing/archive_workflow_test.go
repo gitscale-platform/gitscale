@@ -28,6 +28,10 @@ func registerArchiveActivityStubs(env *testsuite.TestWorkflowEnvironment) {
 		activity.RegisterOptions{Name: ActivityNameEmitArchiveEvent},
 	)
 	env.RegisterActivityWithOptions(
+		func(context.Context, GlueRegisterInput) error { return nil },
+		activity.RegisterOptions{Name: ActivityNameGlueRegister},
+	)
+	env.RegisterActivityWithOptions(
 		func(context.Context, DropInput) error { return nil },
 		activity.RegisterOptions{Name: ActivityNameDropPartition},
 	)
@@ -55,6 +59,11 @@ func TestPartitionArchiveWorkflow_happyPath(t *testing.T) {
 		LakeURI:       "s3://test-bucket/billing/usage_events/year=2026/month=05/usage_events_2026_05.parquet",
 		RowCount:      100,
 		BytesWritten:  4096,
+	}).Return(nil)
+	env.OnActivity(ActivityNameGlueRegister, mock.Anything, GlueRegisterInput{
+		Year:    2026,
+		Month:   5,
+		LakeURI: "s3://test-bucket/billing/usage_events/year=2026/month=05/usage_events_2026_05.parquet",
 	}).Return(nil)
 	env.OnActivity(ActivityNameDropPartition, mock.Anything, DropInput{Year: 2026, Month: 5}).
 		Return(nil)
@@ -102,6 +111,7 @@ func TestPartitionArchiveWorkflow_exportRetryOnFirstFailure(t *testing.T) {
 	env.OnActivity(ActivityNameExport, mock.Anything, ExportInput{Year: 2026, Month: 5}).
 		Return(exportResult, nil)
 	env.OnActivity(ActivityNameEmitArchiveEvent, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(ActivityNameGlueRegister, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(ActivityNameDropPartition, mock.Anything, DropInput{Year: 2026, Month: 5}).
 		Return(nil)
 
@@ -155,6 +165,7 @@ func TestPartitionArchiveWorkflow_dropFailureSurfacesError(t *testing.T) {
 	env.OnActivity(ActivityNameExport, mock.Anything, mock.Anything).
 		Return(ExportResult{LakeURI: "s3://b/k", RowCount: 1, BytesWritten: 100, SHA256Hex: "x"}, nil)
 	env.OnActivity(ActivityNameEmitArchiveEvent, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(ActivityNameGlueRegister, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(ActivityNameDropPartition, mock.Anything, mock.Anything).
 		Return(errors.New("pg: table does not exist"))
 

@@ -9,10 +9,11 @@ import (
 // archive workflow + activity registration (e.g. when real deps such as the
 // object store are not yet wired).
 type ArchiveDeps struct {
-	Detach *DetachPartitionActivity
-	Export *ExportActivity
-	Emit   *EmitArchiveEventActivity
-	Drop   *DropPartitionActivity
+	Detach       *DetachPartitionActivity
+	Export       *ExportActivity
+	Emit         *EmitArchiveEventActivity
+	GlueRegister *GlueRegisterActivity
+	Drop         *DropPartitionActivity
 }
 
 // Bundle returns the registration set for the billing-maintenance task queue.
@@ -29,6 +30,7 @@ func Bundle(rollover *CreatePartitionActivity, archive *ArchiveDeps) gswf.Bundle
 			gswf.NamedActivity{Name: ActivityNameDetachPartition, Activity: archive.Detach.Execute},
 			gswf.NamedActivity{Name: ActivityNameExport, Activity: archive.Export.Execute},
 			gswf.NamedActivity{Name: ActivityNameEmitArchiveEvent, Activity: archive.Emit.Execute},
+			gswf.NamedActivity{Name: ActivityNameGlueRegister, Activity: archive.GlueRegister.Execute},
 			gswf.NamedActivity{Name: ActivityNameDropPartition, Activity: archive.Drop.Execute},
 		)
 	}
