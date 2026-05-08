@@ -72,6 +72,11 @@ func (s *Store) Repositories() store.RepositoryReader {
 	return &repositoryReader{q: s.db}
 }
 
+// Billing returns the billing reader bound to the pool.
+func (s *Store) Billing() store.BillingReader {
+	return &billingReader{q: s.db}
+}
+
 // txWrapper adapts a pgx.Tx to the store.Tx interface.
 type txWrapper struct {
 	tx pgx.Tx
@@ -83,6 +88,10 @@ func (w *txWrapper) Identity() store.IdentityWriter {
 
 func (w *txWrapper) Repositories() store.RepositoryWriter {
 	return &repositoryWriter{repositoryReader: repositoryReader{q: w.tx}}
+}
+
+func (w *txWrapper) Billing() store.BillingWriter {
+	return &billingWriter{billingReader: billingReader{q: w.tx}}
 }
 
 // WriteOutbox inserts a row into the domain-specific outbox table within the

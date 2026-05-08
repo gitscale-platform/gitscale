@@ -26,6 +26,9 @@ type MetadataStore interface {
 
 	// Repositories returns a reader for the repositories domain.
 	Repositories() RepositoryReader
+
+	// Billing returns a reader for the billing domain.
+	Billing() BillingReader
 }
 
 // Tx is a handle for the active transaction passed to Transact callbacks.
@@ -36,6 +39,9 @@ type Tx interface {
 
 	// Repositories returns the repository writer for this transaction.
 	Repositories() RepositoryWriter
+
+	// Billing returns the billing writer for this transaction.
+	Billing() BillingWriter
 
 	// WriteOutbox appends a row to the domain's outbox table within this
 	// transaction. The row is removed if the transaction rolls back.
@@ -147,4 +153,38 @@ type RepositoryWriter interface {
 	RepositoryReader
 	Insert(ctx context.Context, r Repository) error
 	UpdatePermissions(ctx context.Context, repoID uuid.UUID, permissionHash string) error
+}
+
+// PartitionArchive is the billing.partition_archives row model.
+// It records a successful monthly partition export to the data lake; the
+// row + outbox event are written in the same Tx (ADR-008) and idempotency
+// is anchored on UNIQUE(year, month, partition_name).
+type PartitionArchive struct {
+	ID            uuid.UUID
+	Year          int
+	Month         int
+	PartitionName string
+	LakeURI       string
+	RowCount      int64
+	BytesWritten  int64
+	ArchivedAt    time.Time
+}
+
+// BillingReader exposes read-only queries against the billing domain.
+// Methods defined here may be called both inside and outside a transaction.
+type BillingReader interface {
+	// GetPartitionArchiveByKey returns the row matching the natural key
+	// (year, month, partition_name) or (nil, nil) when no row exists.
+	GetPartitionArchiveByKey(ctx context.Context, year, month int, partitionName string) (*PartitionArchive, error)
+}
+
+// BillingWriter exposes write operations against the billing domain.
+// Methods must be called within a Tx.
+type BillingWriter interface {
+	BillingReader
+	// InsertPartitionArchiveIfAbsent attempts to insert pa. It returns
+	// (id, true, nil) if the row was inserted, or (existingID, false, nil)
+	// when the natural key already existed (idempotent retry).
+	// Errors other than UNIQUE conflict are returned.
+	InsertPartitionArchiveIfAbsent(ctx context.Context, pa PartitionArchive) (uuid.UUID, bool, error)
 }

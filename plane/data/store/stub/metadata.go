@@ -27,17 +27,19 @@ type OutboxRecord struct {
 
 // Store is the in-memory implementation of store.MetadataStore.
 type Store struct {
-	mu      sync.Mutex
-	users   map[uuid.UUID]*store.HumanUser
-	agents  map[uuid.UUID]*store.AgentIdentity
-	outbox  []OutboxRecord
+	mu                sync.Mutex
+	users             map[uuid.UUID]*store.HumanUser
+	agents            map[uuid.UUID]*store.AgentIdentity
+	partitionArchives map[string]store.PartitionArchive
+	outbox            []OutboxRecord
 }
 
 // New returns an empty Store.
 func New() *Store {
 	return &Store{
-		users:  make(map[uuid.UUID]*store.HumanUser),
-		agents: make(map[uuid.UUID]*store.AgentIdentity),
+		users:             make(map[uuid.UUID]*store.HumanUser),
+		agents:            make(map[uuid.UUID]*store.AgentIdentity),
+		partitionArchives: make(map[string]store.PartitionArchive),
 	}
 }
 
@@ -66,6 +68,14 @@ func (s *Store) Transact(_ context.Context, fn func(store.Tx) error) error {
 	for id, a := range tx.pendingAgents {
 		s.agents[id] = a
 	}
+	for k, pa := range tx.pendingPartitionArchives {
+		// First-writer-wins on commit: do not overwrite an existing row.
+		// The Tx.Billing() writer already returns the existing id on
+		// duplicate, so this guard mirrors postgres ON CONFLICT DO NOTHING.
+		if _, exists := s.partitionArchives[k]; !exists {
+			s.partitionArchives[k] = pa
+		}
+	}
 	s.outbox = append(s.outbox, tx.pendingOutbox...)
 	return nil
 }
@@ -82,10 +92,11 @@ func (s *Store) Repositories() store.RepositoryReader {
 
 // stubTx is the transaction handle passed to Transact callbacks.
 type stubTx struct {
-	store         *Store
-	pendingUsers  map[uuid.UUID]*store.HumanUser
-	pendingAgents map[uuid.UUID]*store.AgentIdentity
-	pendingOutbox []OutboxRecord
+	store                    *Store
+	pendingUsers             map[uuid.UUID]*store.HumanUser
+	pendingAgents            map[uuid.UUID]*store.AgentIdentity
+	pendingPartitionArchives map[string]store.PartitionArchive
+	pendingOutbox            []OutboxRecord
 }
 
 func (t *stubTx) lazyInit() {
