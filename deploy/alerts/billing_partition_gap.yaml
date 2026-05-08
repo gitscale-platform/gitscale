@@ -1,0 +1,25 @@
+groups:
+- name: billing-partition-gap
+  rules:
+  - alert: BillingUsageEventsNextPartitionMissing
+    expr: gitscale_billing_partition_days_until_gap{schema="billing",table="usage_events"} <= 11
+    for: 15m
+    labels:
+      severity: page
+    annotations:
+      summary: "billing.usage_events next-month partition missing"
+      runbook: "docs/runbooks/billing-partition-gap.md"
+      description: |
+        Less than 11 days remain before billing.usage_events INSERTs will
+        fail. The PartitionRolloverWorkflow runs 7 days before EoM, so this
+        alert firing at <=11d means the rollover has missed at least one
+        scheduled cycle. Run cmd/partition-rollover-trigger.
+
+  - alert: BillingUsageEventsPartitionsLow
+    expr: gitscale_billing_partition_count{schema="billing",table="usage_events"} < 3
+    for: 1h
+    labels:
+      severity: warn
+    annotations:
+      summary: "billing.usage_events partition count below 3"
+      runbook: "docs/runbooks/billing-partition-gap.md"
