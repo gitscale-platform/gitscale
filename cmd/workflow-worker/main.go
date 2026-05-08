@@ -28,6 +28,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gitscale-platform/gitscale/plane/data/cache"
 	"github.com/gitscale-platform/gitscale/plane/data/outbox"
 	"github.com/gitscale-platform/gitscale/plane/data/store"
@@ -41,6 +44,8 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -196,6 +201,49 @@ func (r workerRegistrar) RegisterActivity(a any) {
 		return
 	}
 	r.w.RegisterActivity(a)
+}
+
+// dialBillingService dials the application-plane billing service. Until
+// SPIRE/SPIFFE wiring lands (ADR-010) only WORKER_BILLING_INSECURE=true is
+// supported, mirroring the existing IDENTITY_SERVICE_INSECURE convention.
+func dialBillingService(addr string, allowInsecure bool) (*grpc.ClientConn, error) {
+	if addr == "" {
+		return nil, errors.New("BILLING_SERVICE_ADDR is empty")
+	}
+	if !allowInsecure {
+		return nil, errors.New("only WORKER_BILLING_INSECURE=true is supported until SPIRE/SPIFFE wiring lands (ADR-010)")
+	}
+	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+}
+
+// buildS3ClientFromEnv builds an AWS SDK v2 *s3.Client honouring S3_REGION
+// (default us-east-1) and the optional S3_ENDPOINT override (path-style for
+// minio dev). Credentials come from the default AWS chain.
+func buildS3ClientFromEnv(ctx context.Context) (*s3.Client, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithRegion(envDefault("S3_REGION", "us-east-1")),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("aws config: %w", err)
+	}
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.UsePathStyle = true
+		}
+	}), nil
+}
+
+func envBool(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
 }
 
 func envDefault(key, def string) string {
