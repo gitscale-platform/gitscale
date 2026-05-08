@@ -21,10 +21,12 @@ type Metrics struct {
 	// publishDuration records the duration of each PublishBatch call.
 	publishDuration *prometheus.HistogramVec
 
-	// oldestUnprocessed is the age in seconds of the oldest unprocessed outbox
+	// highWaterLag is the age in seconds of the oldest unprocessed outbox
 	// row, sampled every poll cycle regardless of whether this replica holds
-	// the advisory lock. Alert at > 60s sustained (spec §12).
-	oldestUnprocessed *prometheus.GaugeVec
+	// the advisory lock. Tracks ADR-008's high-water mark — the time horizon
+	// up to which every outbox row has been published to Kafka.
+	// Alert at > 60s sustained (spec §12).
+	highWaterLag *prometheus.GaugeVec
 
 	// processedTotal is the cumulative count of successfully processed rows.
 	processedTotal *prometheus.CounterVec
@@ -62,8 +64,8 @@ func NewMetrics(domain string, reg prometheus.Registerer) *Metrics {
 		Buckets:     prometheus.DefBuckets,
 	}, []string{"result"})
 
-	m.oldestUnprocessed = factory.NewGaugeVec(prometheus.GaugeOpts{
-		Name:        "outbox_oldest_unprocessed_seconds",
+	m.highWaterLag = factory.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        "outbox_consumer_high_water_lag_seconds",
 		Help:        "Age in seconds of the oldest unprocessed outbox row. SLO: alert >60s.",
 		ConstLabels: labels,
 	}, []string{})
@@ -104,11 +106,11 @@ func (m *Metrics) observePublishDuration(seconds float64, result string) {
 	m.publishDuration.WithLabelValues(result).Observe(seconds)
 }
 
-func (m *Metrics) setOldestUnprocessed(seconds float64) {
+func (m *Metrics) setHighWaterLag(seconds float64) {
 	if m == nil {
 		return
 	}
-	m.oldestUnprocessed.WithLabelValues().Set(seconds)
+	m.highWaterLag.WithLabelValues().Set(seconds)
 }
 
 func (m *Metrics) addProcessed(n int) {
