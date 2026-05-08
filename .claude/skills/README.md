@@ -17,6 +17,14 @@ Project-scoped skills enforcing GitScale's architectural principles, ADRs, and c
 | [`gitscale-temporal-determinism`](gitscale-temporal-determinism/SKILL.md) | Workflow code under `plane/workflow` | Deterministic workflows; non-determinism only in activities |
 | [`gitscale-firecracker-isolation`](gitscale-firecracker-isolation/SKILL.md) | CI runner / sandbox code | Untrusted code in Firecracker microVMs only (no Docker, gVisor, runc) |
 
+## Generic / cross-project skills
+
+Skills with no GitScale-specific assumptions. Could be lifted to `~/.claude/skills/` (personal) or contributed back upstream without changes.
+
+| Skill | Triggers on | Companion |
+|---|---|---|
+| [`writing-supervisor-runs`](writing-supervisor-runs/SKILL.md) | Scaffolding a new ralph-loop supervisor run (entry prompt + plan + state) | [`.claude/agents/supervisor.md`](../agents/supervisor.md) — generic single-iteration supervisor agent |
+
 ## Cohesion model
 
 Three layers of enforcement, each with its own latency and authority:
