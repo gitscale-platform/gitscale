@@ -29,11 +29,14 @@ import (
 	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/cache"
+	"github.com/gitscale-platform/gitscale/plane/data/outbox"
+	"github.com/gitscale-platform/gitscale/plane/data/store"
 	billingstore "github.com/gitscale-platform/gitscale/plane/data/store/billing"
 	gswf "github.com/gitscale-platform/gitscale/plane/workflow"
 	"github.com/gitscale-platform/gitscale/plane/workflow/billing"
 	"github.com/gitscale-platform/gitscale/plane/workflow/canary"
 	"github.com/gitscale-platform/gitscale/plane/workflow/observability"
+	"github.com/gitscale-platform/gitscale/plane/workflow/outboxttl"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -131,6 +134,20 @@ func run(logger *slog.Logger) error {
 			return fmt.Errorf("billing.NewCreatePartitionActivity: %w", err)
 		}
 		billing.Bundle(partActivity, nil).Apply(workerRegistrar{w})
+
+		// Outbox TTL expirer (#45, ADR-008): one Expirer per domain, dispatched
+		// by a single fan-out workflow on the same task queue.
+		expirers := map[store.Domain]*outbox.Expirer{
+			store.DomainIdentity:      outbox.NewExpirer(pool, store.DomainIdentity, outbox.ExpirerOptions{}),
+			store.DomainRepositories:  outbox.NewExpirer(pool, store.DomainRepositories, outbox.ExpirerOptions{}),
+			store.DomainCollaboration: outbox.NewExpirer(pool, store.DomainCollaboration, outbox.ExpirerOptions{}),
+			store.DomainCI:            outbox.NewExpirer(pool, store.DomainCI, outbox.ExpirerOptions{}),
+			store.DomainBilling:       outbox.NewExpirer(pool, store.DomainBilling, outbox.ExpirerOptions{}),
+		}
+		outboxttl.Bundle(outboxttl.NewExpireDomainOutboxActivity(expirers)).Apply(workerRegistrar{w})
+		logger.Info("outbox TTL expirer registered",
+			"workflow", "ExpireOutboxesWorkflow",
+			"activity", outboxttl.ActivityNameExpireDomainOutbox)
 
 		// Register / converge the monthly rollover schedule.
 		ctxSched, cancelSched := context.WithTimeout(context.Background(), 10*time.Second)
