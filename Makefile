@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-md lint-events lint-determinism lint-firecracker lint-proto install-hooks generate proto fmt
+.PHONY: build test lint lint-md lint-events lint-determinism lint-firecracker lint-proto lint-graphql install-hooks generate proto fmt
 
 build:
 	go build ./...
@@ -29,6 +29,13 @@ lint-firecracker:
 
 lint-proto:
 	buf lint
+
+# lint-graphql runs the schema package tests (SDL parse + GitHub-subset
+# compat diff + deprecation policy). Tied to `make test` indirectly via
+# `go test ./...`; this target is the explicit "schema is healthy" gate
+# called from CI as a fast lane (issue #113, ADR-017).
+lint-graphql:
+	go test ./plane/application/graphql/schema/...
 
 proto:
 	buf generate

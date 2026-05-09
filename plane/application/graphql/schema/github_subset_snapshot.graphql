@@ -1,0 +1,75 @@
+# Vendored excerpt of GitHub's public GraphQL schema, trimmed to the named
+# subset GitScale claims field-stable compatibility for. Source:
+# https://docs.github.com/en/graphql/overview/public-schema (consulted
+# 2026-05-09). Refresh tracked in a separate cron-driven workflow.
+#
+# Intent: the compat test asserts every field NAME present here also exists
+# under the same parent type in our schema. Field types and arguments may
+# differ; the contract is name-level GitHub-compatibility for the named
+# subset.
+
+type Repository {
+  id: ID!
+  name: String!
+  nameWithOwner: String!
+  owner: User!
+  defaultBranch: Ref
+  visibility: String!
+  pullRequests: PullRequestConnection!
+  issues: IssueConnection!
+  createdAt: DateTime!
+}
+
+type User {
+  id: ID!
+  login: String!
+  name: String
+  email: String
+  createdAt: DateTime!
+}
+
+type Organization {
+  id: ID!
+  login: String!
+  members: UserConnection!
+}
+
+type PullRequest {
+  id: ID!
+  number: Int!
+  title: String!
+  state: PRState!
+  author: User
+  createdAt: DateTime!
+}
+
+type Issue {
+  id: ID!
+  number: Int!
+  title: String!
+  state: String!
+  createdAt: DateTime!
+}
+
+type PullRequestConnection {
+  nodes: [PullRequest!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type IssueConnection {
+  nodes: [Issue!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type UserConnection {
+  nodes: [User!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+}
