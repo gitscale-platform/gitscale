@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://internal/superpowers/supervisor-state.schema.json",
+  "title": "Supervisor run state",
+  "description": "On-disk state file the supervisor agent reads at the start of every iteration and atomically rewrites before exit. Single source of truth for cross-iteration memory.",
+  "type": "object",
+  "required": [
+    "version",
+    "run_id",
+    "iteration",
+    "started_at",
+    "issues",
+    "in_flight_branches",
+    "last_action",
+    "last_iteration_at",
+    "blockers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Bumped on incompatible state-file changes."
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Run identifier, identical to plan.run_id. YYYY-MM-DD."
+    },
+    "iteration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Iteration counter. Incremented before write each invocation. 0 = uninitialised."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of iteration 1 (run start). Never overwritten."
+    },
+    "last_iteration_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the iteration that produced this state."
+    },
+    "last_action": {
+      "type": "string",
+      "description": "One-sentence description of what this iteration did. e.g. 'merged PR #87 closes #74' or 'dispatched data-plane subagent for #46'."
+    },
+    "issues": {
+      "type": "object",
+      "description": "Map keyed by issue number (as string). One entry per issue listed in plan.issues.",
+      "patternProperties": {
+        "^[0-9]+$": {
+          "type": "object",
+          "required": ["state"],
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "PENDING_DESIGN",
+                "PENDING_PLAN",
+                "PENDING_IMPL",
+                "IMPL_IN_PROGRESS",
+                "PENDING_MERGE",
+                "MERGED",
+                "BLOCKED"
+              ]
+            },
+            "spec": {
+              "type": ["string", "null"],
+              "description": "Path to spec file relative to repo root, or null if not yet written."
+            },
+            "plan": {
+              "type": ["string", "null"],
+              "description": "Path to per-issue plan file relative to repo root, or null."
+            },
+            "branch": {
+              "type": ["string", "null"],
+              "description": "Branch name carrying the implementation, or null."
+            },
+            "worktree": {
+              "type": ["string", "null"],
+              "description": "Absolute path to the per-branch worktree, or null."
+            },
+            "pr": {
+              "type": ["integer", "null"],
+              "description": "PR number once opened, or null."
+            },
+            "merged_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "ISO timestamp of squash-merge, or null."
+            },
+            "follow_up": {
+              "type": "boolean",
+              "default": false,
+              "description": "True if this issue was filed mid-run as a follow-up. Affects termination if plan.termination.follow_up_issues_allowed is true."
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "in_flight_branches": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Currently open branches owned by the supervisor. Length must be <= plan.caps.concurrent_branch_cap."
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Active blockers across the run. Empty array if none. Populated by the agent's failure-handling protocol; cleared when the blocker is resolved."
+    }
+  }
+}
