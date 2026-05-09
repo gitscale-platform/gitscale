@@ -1,0 +1,11 @@
+{
+  "repository_id": "01931a4b-9c10-7000-8000-000000000010",
+  "org_id":        "01931a4b-9c10-7000-8000-000000000020",
+  "owner_id":      "01931a4b-9c10-7000-8000-000000000030",
+  "slug":          "demo-repo",
+  "name":          "Demo Repo",
+  "default_branch":"main",
+  "visibility":    "private",
+  "created_at":    "2026-05-09T08:00:00.000000Z",
+  "_envelope_version": 1
+}

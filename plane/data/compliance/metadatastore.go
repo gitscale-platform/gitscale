@@ -341,21 +341,26 @@ func RunMetadataStoreCompliance(t *testing.T, factory MetadataStoreFactory, opts
 		}
 	})
 
-	t.Run("Domain_reader_stubs_return_sentinel", func(t *testing.T) {
+	t.Run("RepositoryReader_unknown_id_returns_nil_no_error", func(t *testing.T) {
 		s, _, cleanup := factory(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// RepositoryReader methods are not implemented in #14; they must return
-		// a non-nil error and not panic.
+		// RepositoryReader gained a working implementation in issue #111
+		// (REST API HTTP layer). The not-found contract is (nil, nil): the
+		// caller distinguishes existence from error rather than overloading
+		// a sentinel. Implementations must not panic.
 		defer func() {
 			if r := recover(); r != nil {
 				t.Errorf("RepositoryReader.GetByID panicked: %v", r)
 			}
 		}()
-		_, err := s.Repositories().GetByID(ctx, uuid.New())
-		if err == nil {
-			t.Error("expected RepositoryReader.GetByID to return sentinel error")
+		got, err := s.Repositories().GetByID(ctx, uuid.New())
+		if err != nil {
+			t.Errorf("unknown id should not error, got %v", err)
+		}
+		if got != nil {
+			t.Errorf("unknown id should yield nil, got %+v", got)
 		}
 	})
 }

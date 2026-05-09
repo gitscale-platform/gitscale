@@ -121,6 +121,10 @@ func (r *stubRepoReader) GetBySlug(_ context.Context, _ string) (*store.Reposito
 	return nil, nil
 }
 
+func (r *stubRepoReader) ListByOrg(_ context.Context, _ uuid.UUID, _ *time.Time, _ *uuid.UUID, _ int) ([]store.Repository, error) {
+	return nil, nil
+}
+
 func TestMetadataLocator_Found(t *testing.T) {
 	repoID := uuid.New()
 	mds := &stubMetadataStore{repos: map[uuid.UUID]store.Repository{
