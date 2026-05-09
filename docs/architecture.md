@@ -526,9 +526,10 @@ Consequences: <positive, negative, follow-ups>
 ### ADR-008: Adopted outbox-based event consistency with a polling-based outbox consumer
 
 - **Status:** Accepted
+- **Amended:** 2026-05-09
 - **Date:** TBD
 - **Context:** State changes must be observable by search, webhooks, billing, and audit consumers without dual-writes that risk divergence between the DB and the event bus. The publisher must be portable across metadata-store engines (per ADR-006) without coupling the application code to engine-specific CDC.
-- **Decision:** State-mutating SQL transactions write the source change AND an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT … WHERE processed = false ORDER BY created_at LIMIT N` loop) drains each outbox table and publishes to Kafka with idempotent producer config. Outbox rows TTL-expire 24 h after the consumer high-water mark advances past them. Consumers must be idempotent on `event_id`.
+- **Decision:** State-mutating SQL transactions write the source change AND an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT … WHERE processed = false ORDER BY created_at LIMIT N` loop) drains each outbox table and publishes to Kafka with idempotent producer config. Outbox rows TTL-expire 24 h after the consumer high-water mark advances past them. Consumers must be idempotent on `event_id`. The outbox consumer tolerates up to 30 s of PostgreSQL primary→replica lag without skipping events; events past that threshold trigger a paging alert on `outbox_replica_lag_seconds`. Read-replica reads are forbidden for the outbox draining loop — the consumer reads the primary directly.
 - **Consequences:** No dual-write race. Publish latency bounded by poll interval (default 1s; tunable). At-least-once delivery contract; consumers carry the idempotency burden. Logical replication or engine-native CDC is the upgrade path if poll latency becomes a constraint, swappable behind the same `EventQueue` interface. See ADR-019 for the workflow-plane variant of this invariant.
 
 ### ADR-009: Adopted Redis for the rate-limit and identity cache
