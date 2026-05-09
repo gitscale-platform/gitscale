@@ -1,0 +1,8 @@
+{
+  "token_id":          "01234567-89ab-7def-8123-456789abcdef",
+  "principal_id":      "01234567-89ab-7def-8123-456789abcd00",
+  "repo_id":           "01234567-89ab-7def-8123-456789abcd11",
+  "expires_at":        "2026-05-09T12:15:00Z",
+  "minted_at":         "2026-05-09T12:00:00Z",
+  "_envelope_version": 1
+}

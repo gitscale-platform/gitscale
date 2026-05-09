@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/cache"
 	"github.com/google/uuid"
@@ -35,7 +36,39 @@ type Service interface {
 	// Org membership (#15-revocation; stub returns ErrNotImplemented)
 	AddOrgMember(ctx context.Context, orgID, userID uuid.UUID, role string) error
 	RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error
+
+	// Clone-token mint (#112 MCP server). Returns a short-lived
+	// (CloneTokenTTL) opaque token scoped to the (principal, repo) pair.
+	// Both stub and postgres impls write the source row + a
+	// `clone_token_minted` outbox row in the same Tx (ADR-008). Audit /
+	// revocation consumers attach to the outbox event.
+	MintCloneToken(ctx context.Context, principalID, repoID uuid.UUID) (CloneToken, error)
 }
+
+// CloneToken is the result of Service.MintCloneToken. The token is opaque
+// to callers; storage maps it back to (principal_id, repo_id, expires_at).
+// CloneURL is filled in by the caller (or remains empty when the identity
+// service has no opinion on URL shape — the MCP layer constructs the
+// final clone URL from configuration).
+type CloneToken struct {
+	// TokenID is the storage row's primary key, usable as an audit handle.
+	TokenID uuid.UUID
+	// Token is the opaque secret returned to the agent. Treated as a
+	// bearer credential; never logged.
+	Token string
+	// PrincipalID is the principal the token was minted for.
+	PrincipalID uuid.UUID
+	// RepoID is the repository the token grants clone access to.
+	RepoID uuid.UUID
+	// ExpiresAt is the wall-clock TTL boundary.
+	ExpiresAt time.Time
+}
+
+// CloneTokenTTL is the lifetime of a clone token minted via
+// Service.MintCloneToken. Short enough to bound blast radius if the
+// token is exfiltrated; long enough that an interactive agent clone
+// (multi-GB repos) finishes inside one TTL.
+const CloneTokenTTL = 15 * time.Minute
 
 // Service-level sentinel errors.
 var (

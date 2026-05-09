@@ -89,6 +89,21 @@ type OrgMembership struct {
 	Role   string
 }
 
+// CloneToken is the identity.clone_tokens row model. Minted by
+// identity.Service.MintCloneToken (#112 MCP `git_clone`); the row + a
+// clone_token_minted outbox event are written in the same Tx (ADR-008).
+// The Token column stores the opaque secret directly in this iteration —
+// hashing-at-rest is a follow-up tracked alongside the JWT-SVID hardening
+// in the edge plane (ADR-010).
+type CloneToken struct {
+	ID          uuid.UUID
+	Token       string
+	PrincipalID uuid.UUID
+	RepoID      uuid.UUID
+	ExpiresAt   time.Time
+	CreatedAt   time.Time
+}
+
 // IdentityCacheEntry is the minimal projection loaded by the edge-plane
 // identity cache for principal resolution.
 type IdentityCacheEntry struct {
@@ -129,6 +144,10 @@ type IdentityWriter interface {
 	UpdateAgentPermissions(ctx context.Context, agentID uuid.UUID, scope []string) error
 	AddOrgMember(ctx context.Context, m OrgMembership) error
 	RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error
+	// InsertCloneToken records a freshly-minted clone token. The caller
+	// is responsible for generating ID + Token; the writer enforces
+	// uniqueness on (token) via the storage layer's UNIQUE constraint.
+	InsertCloneToken(ctx context.Context, ct CloneToken) error
 }
 
 // Repository is the repositories.repositories row model (minimal projection).

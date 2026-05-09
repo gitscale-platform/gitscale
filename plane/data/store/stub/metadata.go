@@ -32,6 +32,7 @@ type Store struct {
 	agents            map[uuid.UUID]*store.AgentIdentity
 	repositories      map[uuid.UUID]*store.Repository
 	partitionArchives map[string]store.PartitionArchive
+	cloneTokens       map[uuid.UUID]*store.CloneToken
 	outbox            []OutboxRecord
 }
 
@@ -42,7 +43,20 @@ func New() *Store {
 		agents:            make(map[uuid.UUID]*store.AgentIdentity),
 		repositories:      make(map[uuid.UUID]*store.Repository),
 		partitionArchives: make(map[string]store.PartitionArchive),
+		cloneTokens:       make(map[uuid.UUID]*store.CloneToken),
 	}
+}
+
+// CloneTokens returns a snapshot of recorded clone-token rows. Used by
+// tests that need to assert MintCloneToken's storage side-effect.
+func (s *Store) CloneTokens() []store.CloneToken {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]store.CloneToken, 0, len(s.cloneTokens))
+	for _, ct := range s.cloneTokens {
+		out = append(out, *ct)
+	}
+	return out
 }
 
 // Recorded returns all committed OutboxRecords in insertion order.
@@ -73,6 +87,9 @@ func (s *Store) Transact(_ context.Context, fn func(store.Tx) error) error {
 	for id, r := range tx.pendingRepositories {
 		s.repositories[id] = r
 	}
+	for id, ct := range tx.pendingCloneTokens {
+		s.cloneTokens[id] = ct
+	}
 	for k, pa := range tx.pendingPartitionArchives {
 		// First-writer-wins on commit: do not overwrite an existing row.
 		// The Tx.Billing() writer already returns the existing id on
@@ -102,6 +119,7 @@ type stubTx struct {
 	pendingAgents            map[uuid.UUID]*store.AgentIdentity
 	pendingRepositories      map[uuid.UUID]*store.Repository
 	pendingPartitionArchives map[string]store.PartitionArchive
+	pendingCloneTokens       map[uuid.UUID]*store.CloneToken
 	pendingOutbox            []OutboxRecord
 }
 
@@ -349,6 +367,16 @@ func (w *stubIdentityWriter) AddOrgMember(_ context.Context, _ store.OrgMembersh
 }
 
 func (w *stubIdentityWriter) RemoveOrgMember(_ context.Context, _, _ uuid.UUID) error {
+	return nil
+}
+
+func (w *stubIdentityWriter) InsertCloneToken(_ context.Context, ct store.CloneToken) error {
+	w.tx.lazyInit()
+	if w.tx.pendingCloneTokens == nil {
+		w.tx.pendingCloneTokens = make(map[uuid.UUID]*store.CloneToken)
+	}
+	cp := ct
+	w.tx.pendingCloneTokens[ct.ID] = &cp
 	return nil
 }
 

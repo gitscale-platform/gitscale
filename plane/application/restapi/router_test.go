@@ -57,11 +57,27 @@ func (l *memLimiter) Take(_ context.Context, key string, capacity, _, n float64)
 	return true, cur, nil
 }
 
+// Inspect returns a stub state derived from the recorded bucket. Added
+// to satisfy the additive RateLimiter.Inspect surface (#112 / ADR-017).
+func (l *memLimiter) Inspect(_ context.Context, key string) (ratelimit.BucketState, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cur, ok := l.buckets[key]
+	if !ok {
+		return ratelimit.BucketState{}, nil
+	}
+	return ratelimit.BucketState{Remaining: cur}, nil
+}
+
 // brokenLimiter always errors so we can prove the middleware fails closed.
 type brokenLimiter struct{}
 
 func (brokenLimiter) Take(_ context.Context, _ string, _, _, _ float64) (bool, float64, error) {
 	return false, 0, errors.New("limiter exploded")
+}
+
+func (brokenLimiter) Inspect(_ context.Context, _ string) (ratelimit.BucketState, error) {
+	return ratelimit.BucketState{}, errors.New("limiter exploded")
 }
 
 func newTestRouter(t *testing.T, l ratelimit.RateLimiter, cfg RateConfig, principals map[string]Principal) (*httptest.Server, identity.Service, repositories.Service) {
