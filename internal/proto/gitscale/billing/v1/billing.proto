@@ -25,6 +25,19 @@ service BillingService {
   // same event id and only the first call writes the outbox row.
   rpc RecordDEKDestroyed(RecordDEKDestroyedRequest)
       returns (RecordDEKDestroyedResponse);
+
+  // GetQuotaAccount fetches the per-org quota envelope for a principal's
+  // organisation (#110, ADR-019). CI boot activities call this to enforce
+  // per-job ceilings before allocating microVM resources.
+  rpc GetQuotaAccount(GetQuotaAccountRequest)
+      returns (GetQuotaAccountResponse);
+
+  // RecordCIJobCompleted persists the per-job billable consumption + emits
+  // ci.job_completed to the outbox in the same Tx (#110, ADR-008/019).
+  // Idempotent on job_id: repeat calls return the same event_id and only
+  // the first call writes the outbox row.
+  rpc RecordCIJobCompleted(RecordCIJobCompletedRequest)
+      returns (RecordCIJobCompletedResponse);
 }
 
 message RecordPartitionArchivedRequest {
@@ -52,4 +65,43 @@ message RecordDEKDestroyedRequest {
 message RecordDEKDestroyedResponse {
   string event_id = 1;  // UUID of outbox event row
   bool   created  = 2;  // false on idempotent retry (event already emitted)
+}
+
+// GetQuotaAccount — workflow plane reads org-level quota caps to enforce
+// per-job ceilings before booting a CI microVM (#110, ADR-019). Lookup is
+// by org_id; the workflow input already carries the resolved org id from
+// the trigger entrypoint (REST API #111), so we avoid a redundant
+// principal->org join on the hot path.
+message GetQuotaAccountRequest {
+  string org_id = 1; // UUID of the organisation owning the quota account
+}
+
+message GetQuotaAccountResponse {
+  string account_id = 1;                       // UUID
+  string org_id = 2;                           // UUID
+  string plan_tier = 3;                        // free|pro|enterprise
+  int64 tokens_per_week_cap = 4;
+  int64 compute_minutes_per_month_cap = 5;
+  int64 storage_gb_cap = 6;
+}
+
+// RecordCIJobCompleted — emit ci.job_completed to the outbox in one Tx
+// alongside the source-row insert (#110, ADR-008/019). Idempotent on
+// job_id.
+message RecordCIJobCompletedRequest {
+  string job_id = 1;
+  string principal_id = 2;
+  string principal_kind = 3; // human|agent|service
+  string org_id = 4;
+  string repo_id = 5;
+  string tier = 6;            // hot|cold
+  double vcpu_seconds = 7;
+  double memory_mb_seconds = 8;
+  int64  egress_kb = 9;
+  int32  exit_code = 10;
+}
+
+message RecordCIJobCompletedResponse {
+  string event_id = 1; // UUID of outbox event row
+  bool   created  = 2; // false on idempotent retry
 }

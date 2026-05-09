@@ -1,0 +1,29 @@
+# Firecracker-only isolation rules for GitScale CI runner code (ADR-002).
+#
+# Each non-blank, non-comment line is a regex tested against every line of every
+# .go file under plane/workflow/runner/ and plane/workflow/ci/. A match fails
+# the lint. *_test.go files are NOT exempt — sandbox-imports inside tests would
+# leak into the binary at compile time and the lint must catch them.
+#
+# This is the hard ADR-002 boundary: Firecracker microVMs are the only sandbox
+# technology. Docker, gVisor, runc, runsc, podman, and any other container
+# runtime client are forbidden in this package — the threat model is hardware
+# isolation against untrusted agent code.
+
+# Container runtimes — direct API or library imports.
+\bgithub\.com/docker/
+\bgithub\.com/containerd/
+\bgithub\.com/opencontainers/runc
+\bgithub\.com/opencontainers/runtime-spec
+\bgithub\.com/google/gvisor
+\bgvisor\.dev/
+\bgithub\.com/containers/podman
+\bgithub\.com/containers/buildah
+
+# Container CLI invocation by exec — operators sometimes try docker run.
+"docker"\s*,
+"containerd"\s*,
+"runc"\s*,
+"runsc"\s*,
+"podman"\s*,
+"nerdctl"\s*,

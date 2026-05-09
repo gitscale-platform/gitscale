@@ -289,6 +289,310 @@ func (x *RecordDEKDestroyedResponse) GetCreated() bool {
 	return false
 }
 
+// GetQuotaAccount — workflow plane reads org-level quota caps to enforce
+// per-job ceilings before booting a CI microVM (#110, ADR-019). Lookup is
+// by org_id; the workflow input already carries the resolved org id from
+// the trigger entrypoint (REST API #111), so we avoid a redundant
+// principal->org join on the hot path.
+type GetQuotaAccountRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"` // UUID of the organisation owning the quota account
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetQuotaAccountRequest) Reset() {
+	*x = GetQuotaAccountRequest{}
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetQuotaAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetQuotaAccountRequest) ProtoMessage() {}
+
+func (x *GetQuotaAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetQuotaAccountRequest.ProtoReflect.Descriptor instead.
+func (*GetQuotaAccountRequest) Descriptor() ([]byte, []int) {
+	return file_gitscale_billing_v1_billing_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetQuotaAccountRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+type GetQuotaAccountResponse struct {
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	AccountId                 string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"` // UUID
+	OrgId                     string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`             // UUID
+	PlanTier                  string                 `protobuf:"bytes,3,opt,name=plan_tier,json=planTier,proto3" json:"plan_tier,omitempty"`    // free|pro|enterprise
+	TokensPerWeekCap          int64                  `protobuf:"varint,4,opt,name=tokens_per_week_cap,json=tokensPerWeekCap,proto3" json:"tokens_per_week_cap,omitempty"`
+	ComputeMinutesPerMonthCap int64                  `protobuf:"varint,5,opt,name=compute_minutes_per_month_cap,json=computeMinutesPerMonthCap,proto3" json:"compute_minutes_per_month_cap,omitempty"`
+	StorageGbCap              int64                  `protobuf:"varint,6,opt,name=storage_gb_cap,json=storageGbCap,proto3" json:"storage_gb_cap,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *GetQuotaAccountResponse) Reset() {
+	*x = GetQuotaAccountResponse{}
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetQuotaAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetQuotaAccountResponse) ProtoMessage() {}
+
+func (x *GetQuotaAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetQuotaAccountResponse.ProtoReflect.Descriptor instead.
+func (*GetQuotaAccountResponse) Descriptor() ([]byte, []int) {
+	return file_gitscale_billing_v1_billing_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetQuotaAccountResponse) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *GetQuotaAccountResponse) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GetQuotaAccountResponse) GetPlanTier() string {
+	if x != nil {
+		return x.PlanTier
+	}
+	return ""
+}
+
+func (x *GetQuotaAccountResponse) GetTokensPerWeekCap() int64 {
+	if x != nil {
+		return x.TokensPerWeekCap
+	}
+	return 0
+}
+
+func (x *GetQuotaAccountResponse) GetComputeMinutesPerMonthCap() int64 {
+	if x != nil {
+		return x.ComputeMinutesPerMonthCap
+	}
+	return 0
+}
+
+func (x *GetQuotaAccountResponse) GetStorageGbCap() int64 {
+	if x != nil {
+		return x.StorageGbCap
+	}
+	return 0
+}
+
+// RecordCIJobCompleted — emit ci.job_completed to the outbox in one Tx
+// alongside the source-row insert (#110, ADR-008/019). Idempotent on
+// job_id.
+type RecordCIJobCompletedRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	JobId           string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	PrincipalId     string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	PrincipalKind   string                 `protobuf:"bytes,3,opt,name=principal_kind,json=principalKind,proto3" json:"principal_kind,omitempty"` // human|agent|service
+	OrgId           string                 `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	RepoId          string                 `protobuf:"bytes,5,opt,name=repo_id,json=repoId,proto3" json:"repo_id,omitempty"`
+	Tier            string                 `protobuf:"bytes,6,opt,name=tier,proto3" json:"tier,omitempty"` // hot|cold
+	VcpuSeconds     float64                `protobuf:"fixed64,7,opt,name=vcpu_seconds,json=vcpuSeconds,proto3" json:"vcpu_seconds,omitempty"`
+	MemoryMbSeconds float64                `protobuf:"fixed64,8,opt,name=memory_mb_seconds,json=memoryMbSeconds,proto3" json:"memory_mb_seconds,omitempty"`
+	EgressKb        int64                  `protobuf:"varint,9,opt,name=egress_kb,json=egressKb,proto3" json:"egress_kb,omitempty"`
+	ExitCode        int32                  `protobuf:"varint,10,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RecordCIJobCompletedRequest) Reset() {
+	*x = RecordCIJobCompletedRequest{}
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordCIJobCompletedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordCIJobCompletedRequest) ProtoMessage() {}
+
+func (x *RecordCIJobCompletedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordCIJobCompletedRequest.ProtoReflect.Descriptor instead.
+func (*RecordCIJobCompletedRequest) Descriptor() ([]byte, []int) {
+	return file_gitscale_billing_v1_billing_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RecordCIJobCompletedRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedRequest) GetPrincipalId() string {
+	if x != nil {
+		return x.PrincipalId
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedRequest) GetPrincipalKind() string {
+	if x != nil {
+		return x.PrincipalKind
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedRequest) GetRepoId() string {
+	if x != nil {
+		return x.RepoId
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedRequest) GetTier() string {
+	if x != nil {
+		return x.Tier
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedRequest) GetVcpuSeconds() float64 {
+	if x != nil {
+		return x.VcpuSeconds
+	}
+	return 0
+}
+
+func (x *RecordCIJobCompletedRequest) GetMemoryMbSeconds() float64 {
+	if x != nil {
+		return x.MemoryMbSeconds
+	}
+	return 0
+}
+
+func (x *RecordCIJobCompletedRequest) GetEgressKb() int64 {
+	if x != nil {
+		return x.EgressKb
+	}
+	return 0
+}
+
+func (x *RecordCIJobCompletedRequest) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+type RecordCIJobCompletedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // UUID of outbox event row
+	Created       bool                   `protobuf:"varint,2,opt,name=created,proto3" json:"created,omitempty"`               // false on idempotent retry
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordCIJobCompletedResponse) Reset() {
+	*x = RecordCIJobCompletedResponse{}
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordCIJobCompletedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordCIJobCompletedResponse) ProtoMessage() {}
+
+func (x *RecordCIJobCompletedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_gitscale_billing_v1_billing_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordCIJobCompletedResponse.ProtoReflect.Descriptor instead.
+func (*RecordCIJobCompletedResponse) Descriptor() ([]byte, []int) {
+	return file_gitscale_billing_v1_billing_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RecordCIJobCompletedResponse) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *RecordCIJobCompletedResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
 var File_gitscale_billing_v1_billing_proto protoreflect.FileDescriptor
 
 const file_gitscale_billing_v1_billing_proto_rawDesc = "" +
@@ -313,10 +617,37 @@ const file_gitscale_billing_v1_billing_proto_rawDesc = "" +
 	"\x11vault_key_version\x18\x05 \x01(\x05R\x0fvaultKeyVersion\"Q\n" +
 	"\x1aRecordDEKDestroyedResponse\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated2\x8e\x02\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"/\n" +
+	"\x16GetQuotaAccountRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\x83\x02\n" +
+	"\x17GetQuotaAccountResponse\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x1b\n" +
+	"\tplan_tier\x18\x03 \x01(\tR\bplanTier\x12-\n" +
+	"\x13tokens_per_week_cap\x18\x04 \x01(\x03R\x10tokensPerWeekCap\x12@\n" +
+	"\x1dcompute_minutes_per_month_cap\x18\x05 \x01(\x03R\x19computeMinutesPerMonthCap\x12$\n" +
+	"\x0estorage_gb_cap\x18\x06 \x01(\x03R\fstorageGbCap\"\xcb\x02\n" +
+	"\x1bRecordCIJobCompletedRequest\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12!\n" +
+	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x12%\n" +
+	"\x0eprincipal_kind\x18\x03 \x01(\tR\rprincipalKind\x12\x15\n" +
+	"\x06org_id\x18\x04 \x01(\tR\x05orgId\x12\x17\n" +
+	"\arepo_id\x18\x05 \x01(\tR\x06repoId\x12\x12\n" +
+	"\x04tier\x18\x06 \x01(\tR\x04tier\x12!\n" +
+	"\fvcpu_seconds\x18\a \x01(\x01R\vvcpuSeconds\x12*\n" +
+	"\x11memory_mb_seconds\x18\b \x01(\x01R\x0fmemoryMbSeconds\x12\x1b\n" +
+	"\tegress_kb\x18\t \x01(\x03R\begressKb\x12\x1b\n" +
+	"\texit_code\x18\n" +
+	" \x01(\x05R\bexitCode\"S\n" +
+	"\x1cRecordCIJobCompletedResponse\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x18\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated2\xf9\x03\n" +
 	"\x0eBillingService\x12\x84\x01\n" +
 	"\x17RecordPartitionArchived\x123.gitscale.billing.v1.RecordPartitionArchivedRequest\x1a4.gitscale.billing.v1.RecordPartitionArchivedResponse\x12u\n" +
-	"\x12RecordDEKDestroyed\x12..gitscale.billing.v1.RecordDEKDestroyedRequest\x1a/.gitscale.billing.v1.RecordDEKDestroyedResponseB\xe0\x01\n" +
+	"\x12RecordDEKDestroyed\x12..gitscale.billing.v1.RecordDEKDestroyedRequest\x1a/.gitscale.billing.v1.RecordDEKDestroyedResponse\x12l\n" +
+	"\x0fGetQuotaAccount\x12+.gitscale.billing.v1.GetQuotaAccountRequest\x1a,.gitscale.billing.v1.GetQuotaAccountResponse\x12{\n" +
+	"\x14RecordCIJobCompleted\x120.gitscale.billing.v1.RecordCIJobCompletedRequest\x1a1.gitscale.billing.v1.RecordCIJobCompletedResponseB\xe0\x01\n" +
 	"\x17com.gitscale.billing.v1B\fBillingProtoP\x01ZIgithub.com/gitscale-platform/gitscale/internal/proto/billing/v1;billingv1\xa2\x02\x03GBX\xaa\x02\x13Gitscale.Billing.V1\xca\x02\x13Gitscale\\Billing\\V1\xe2\x02\x1fGitscale\\Billing\\V1\\GPBMetadata\xea\x02\x15Gitscale::Billing::V1b\x06proto3"
 
 var (
@@ -331,20 +662,28 @@ func file_gitscale_billing_v1_billing_proto_rawDescGZIP() []byte {
 	return file_gitscale_billing_v1_billing_proto_rawDescData
 }
 
-var file_gitscale_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_gitscale_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_gitscale_billing_v1_billing_proto_goTypes = []any{
 	(*RecordPartitionArchivedRequest)(nil),  // 0: gitscale.billing.v1.RecordPartitionArchivedRequest
 	(*RecordPartitionArchivedResponse)(nil), // 1: gitscale.billing.v1.RecordPartitionArchivedResponse
 	(*RecordDEKDestroyedRequest)(nil),       // 2: gitscale.billing.v1.RecordDEKDestroyedRequest
 	(*RecordDEKDestroyedResponse)(nil),      // 3: gitscale.billing.v1.RecordDEKDestroyedResponse
+	(*GetQuotaAccountRequest)(nil),          // 4: gitscale.billing.v1.GetQuotaAccountRequest
+	(*GetQuotaAccountResponse)(nil),         // 5: gitscale.billing.v1.GetQuotaAccountResponse
+	(*RecordCIJobCompletedRequest)(nil),     // 6: gitscale.billing.v1.RecordCIJobCompletedRequest
+	(*RecordCIJobCompletedResponse)(nil),    // 7: gitscale.billing.v1.RecordCIJobCompletedResponse
 }
 var file_gitscale_billing_v1_billing_proto_depIdxs = []int32{
 	0, // 0: gitscale.billing.v1.BillingService.RecordPartitionArchived:input_type -> gitscale.billing.v1.RecordPartitionArchivedRequest
 	2, // 1: gitscale.billing.v1.BillingService.RecordDEKDestroyed:input_type -> gitscale.billing.v1.RecordDEKDestroyedRequest
-	1, // 2: gitscale.billing.v1.BillingService.RecordPartitionArchived:output_type -> gitscale.billing.v1.RecordPartitionArchivedResponse
-	3, // 3: gitscale.billing.v1.BillingService.RecordDEKDestroyed:output_type -> gitscale.billing.v1.RecordDEKDestroyedResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: gitscale.billing.v1.BillingService.GetQuotaAccount:input_type -> gitscale.billing.v1.GetQuotaAccountRequest
+	6, // 3: gitscale.billing.v1.BillingService.RecordCIJobCompleted:input_type -> gitscale.billing.v1.RecordCIJobCompletedRequest
+	1, // 4: gitscale.billing.v1.BillingService.RecordPartitionArchived:output_type -> gitscale.billing.v1.RecordPartitionArchivedResponse
+	3, // 5: gitscale.billing.v1.BillingService.RecordDEKDestroyed:output_type -> gitscale.billing.v1.RecordDEKDestroyedResponse
+	5, // 6: gitscale.billing.v1.BillingService.GetQuotaAccount:output_type -> gitscale.billing.v1.GetQuotaAccountResponse
+	7, // 7: gitscale.billing.v1.BillingService.RecordCIJobCompleted:output_type -> gitscale.billing.v1.RecordCIJobCompletedResponse
+	4, // [4:8] is the sub-list for method output_type
+	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -361,7 +700,7 @@ func file_gitscale_billing_v1_billing_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gitscale_billing_v1_billing_proto_rawDesc), len(file_gitscale_billing_v1_billing_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

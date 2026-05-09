@@ -1,0 +1,5 @@
+// File renamed to .txt so the Go toolchain ignores it; the lint scanner
+// targets *.go but the test renames before invoking. This file's only
+// purpose is to fail the firecracker lint via a forbidden import.
+//
+// import "github.com/docker/docker/client" // forbidden by ADR-002

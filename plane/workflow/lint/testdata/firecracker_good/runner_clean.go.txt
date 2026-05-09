@@ -1,0 +1,7 @@
+// Clean fixture: no forbidden imports. Renamed to .txt so the Go
+// toolchain ignores it; the lint test renames into place.
+package fakerunner
+
+import "context"
+
+func boot(ctx context.Context) {}

@@ -69,6 +69,31 @@ func (r *billingReader) ListPartitionArchivesArchivedBefore(ctx context.Context,
 	return out, nil
 }
 
+// GetQuotaAccountByOrg returns the billing.quota_accounts row for orgID
+// or (nil, nil) when no row exists. CI boot activities use this to enforce
+// per-job ceilings (#110, ADR-019).
+func (r *billingReader) GetQuotaAccountByOrg(ctx context.Context, orgID uuid.UUID) (*store.QuotaAccount, error) {
+	const q = `
+		SELECT id, org_id, plan_tier,
+		       tokens_per_week_cap, compute_minutes_per_month_cap, storage_gb_cap,
+		       created_at, updated_at
+		FROM billing.quota_accounts
+		WHERE org_id = $1`
+	var qa store.QuotaAccount
+	err := r.q.QueryRow(ctx, q, orgID).Scan(
+		&qa.ID, &qa.OrgID, &qa.PlanTier,
+		&qa.TokensPerWeekCap, &qa.ComputeMinutesPerMonthCap, &qa.StorageGBCap,
+		&qa.CreatedAt, &qa.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("postgres: GetQuotaAccountByOrg: %w", err)
+	}
+	return &qa, nil
+}
+
 // HasOutboxEventForAggregate consults billing.billing_outbox for an existing
 // row keyed by (event_type, aggregate_id). Used by the DEK destruction
 // workflow (#80) to make outbox writes idempotent without a source row.

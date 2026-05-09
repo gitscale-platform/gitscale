@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-md lint-events lint-determinism lint-proto install-hooks generate proto fmt
+.PHONY: build test lint lint-md lint-events lint-determinism lint-firecracker lint-proto install-hooks generate proto fmt
 
 build:
 	go build ./...
@@ -23,6 +23,9 @@ lint-events:
 
 lint-determinism:
 	bash plane/workflow/lint/lint-determinism.sh
+
+lint-firecracker:
+	bash plane/workflow/lint/lint-firecracker.sh
 
 lint-proto:
 	buf lint
