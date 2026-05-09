@@ -1,0 +1,19 @@
+{
+  "issue_id": "01931a4b-9c10-7000-8000-000000000010",
+  "repo_id": "01931a4b-9c10-7000-8000-000000000020",
+  "reporter_id": "01931a4b-9c10-7000-8000-000000000030",
+  "verdict": "low_quality",
+  "scorer_version": "rule-v1",
+  "score_spam": 0.120,
+  "score_low_quality": 0.550,
+  "score_duplicate": 0.000,
+  "duplicate_of": null,
+  "signals": [
+    { "name": "link_density", "weight": 0.30, "detail": "8 links / 412 chars" },
+    { "name": "reputation",   "weight": 0.25, "detail": "reputation=0.280 (low_quality_floor=0.30)" }
+  ],
+  "decided_at": "2026-05-09T12:34:56.789012Z",
+  "decided_by": "auto",
+  "enforced": true,
+  "_envelope_version": 1
+}
