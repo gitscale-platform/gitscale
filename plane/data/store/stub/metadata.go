@@ -33,6 +33,7 @@ type Store struct {
 	repositories      map[uuid.UUID]*store.Repository
 	partitionArchives map[string]store.PartitionArchive
 	cloneTokens       map[uuid.UUID]*store.CloneToken
+	quotaAccounts     map[uuid.UUID]store.QuotaAccount // keyed by org_id
 	outbox            []OutboxRecord
 }
 
@@ -44,6 +45,7 @@ func New() *Store {
 		repositories:      make(map[uuid.UUID]*store.Repository),
 		partitionArchives: make(map[string]store.PartitionArchive),
 		cloneTokens:       make(map[uuid.UUID]*store.CloneToken),
+		quotaAccounts:     make(map[uuid.UUID]store.QuotaAccount),
 	}
 }
 
@@ -57,6 +59,15 @@ func (s *Store) CloneTokens() []store.CloneToken {
 		out = append(out, *ct)
 	}
 	return out
+}
+
+// SeedQuotaAccount installs a QuotaAccount for the given org. Test helper:
+// production code populates this via real INSERTs in a separate domain
+// service; the stub exposes a direct seam to keep CI-quota fixtures small.
+func (s *Store) SeedQuotaAccount(qa store.QuotaAccount) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.quotaAccounts[qa.OrgID] = qa
 }
 
 // Recorded returns all committed OutboxRecords in insertion order.

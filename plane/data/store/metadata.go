@@ -194,6 +194,21 @@ type RepositoryWriter interface {
 	UpdatePermissions(ctx context.Context, repoID uuid.UUID, permissionHash string) error
 }
 
+// QuotaAccount is the billing.quota_accounts row model. One row per
+// organisation; the per-period caps are copied into quota_windows at
+// window creation (ADR-012). Read by CI boot activities to derive
+// per-job ceilings (#110, ADR-019).
+type QuotaAccount struct {
+	ID                        uuid.UUID
+	OrgID                     uuid.UUID
+	PlanTier                  string
+	TokensPerWeekCap          int64
+	ComputeMinutesPerMonthCap int64
+	StorageGBCap              int64
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+}
+
 // PartitionArchive is the billing.partition_archives row model.
 // It records a successful monthly partition export to the data lake; the
 // row + outbox event are written in the same Tx (ADR-008) and idempotency
@@ -227,6 +242,13 @@ type BillingReader interface {
 	// outbox-only events (e.g. billing.partition_dek_destroyed) that have
 	// no source row to UNIQUE-key against.
 	HasOutboxEventForAggregate(ctx context.Context, eventType string, aggregateID uuid.UUID) (bool, error)
+
+	// GetQuotaAccountByOrg returns the billing.quota_accounts row keyed by
+	// org_id (UNIQUE in the schema). Returns (nil, nil) when no row
+	// exists; the application service translates that to the
+	// ErrQuotaAccountNotFound surfaced via the gRPC NotFound code (#110,
+	// ADR-019).
+	GetQuotaAccountByOrg(ctx context.Context, orgID uuid.UUID) (*QuotaAccount, error)
 }
 
 // BillingWriter exposes write operations against the billing domain.

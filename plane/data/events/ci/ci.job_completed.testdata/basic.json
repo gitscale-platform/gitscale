@@ -1,0 +1,15 @@
+{
+  "event_id":         "01931a4b-9c10-7000-8000-0000000000a1",
+  "job_id":           "01931a4b-9c10-7000-8000-0000000000a2",
+  "principal_id":     "01931a4b-9c10-7000-8000-0000000000a3",
+  "principal_kind":   "agent",
+  "org_id":           "01931a4b-9c10-7000-8000-0000000000a4",
+  "repo_id":          "01931a4b-9c10-7000-8000-0000000000a5",
+  "tier":             "cold",
+  "vcpu_seconds":     12.5,
+  "memory_mb_seconds": 25600.0,
+  "egress_kb":        4096,
+  "exit_code":        0,
+  "occurred_at":      "2026-05-09T10:11:12.000000Z",
+  "_envelope_version": 1
+}

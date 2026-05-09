@@ -17,6 +17,16 @@ type Service interface {
 	// version trim is irreversible); the outbox row is the audit record.
 	// Idempotent on the (year, month, partition_name, kek_hint) tuple.
 	RecordDEKDestroyed(ctx context.Context, in RecordDEKDestroyedInput) (RecordDEKDestroyedOutput, error)
+
+	// GetQuotaAccount returns the org-level quota envelope used by CI boot
+	// activities to enforce per-job ceilings (#110, ADR-019). Returns
+	// ErrQuotaAccountNotFound when no row exists for the org.
+	GetQuotaAccount(ctx context.Context, in GetQuotaAccountInput) (GetQuotaAccountOutput, error)
+
+	// RecordCIJobCompleted writes the source row + ci.job_completed outbox
+	// row in one Tx (#110, ADR-008/019). Idempotent on JobID — retries
+	// return Created=false and do not double-write the outbox.
+	RecordCIJobCompleted(ctx context.Context, in RecordCIJobCompletedInput) (RecordCIJobCompletedOutput, error)
 }
 
 // Sentinel validation errors. Wrapped with %w-friendly equality at the gRPC
@@ -29,6 +39,15 @@ var (
 	ErrNegativeCount       = errors.New("billing: row_count or bytes_written is negative")
 	ErrEmptyKEKHint        = errors.New("billing: kek_hint is empty")
 	ErrInvalidKeyVersion   = errors.New("billing: vault_key_version must be > 0")
+
+	// CI service errors (#110).
+	ErrEmptyOrgID          = errors.New("billing: org_id is empty")
+	ErrQuotaAccountNotFound = errors.New("billing: quota account not found for org")
+	ErrEmptyJobID          = errors.New("billing: job_id is empty")
+	ErrEmptyPrincipalID    = errors.New("billing: principal_id is empty")
+	ErrInvalidPrincipalKind = errors.New("billing: principal_kind must be human|agent|service")
+	ErrInvalidTier         = errors.New("billing: tier must be hot|cold")
+	ErrNegativeMetric      = errors.New("billing: vcpu_seconds / memory_mb_seconds / egress_kb must be >= 0")
 )
 
 // validateInput enforces the contract documented on RecordPartitionArchivedInput.

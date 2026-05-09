@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/ci/ci.job_completed.schema.json",
+  "title": "ci.job_completed",
+  "description": "Emitted on every CI job termination (success, failure, cancellation). Payload of the billing_outbox row whose event_type = 'ci.job_completed'. ADR-008 invariant: written in the same Tx as the (currently absent) source row; idempotent on JobID via deterministic UUIDv5 aggregate_id. Issue #110.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "job_id",
+    "principal_id",
+    "principal_kind",
+    "org_id",
+    "repo_id",
+    "tier",
+    "vcpu_seconds",
+    "memory_mb_seconds",
+    "egress_kb",
+    "exit_code",
+    "occurred_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "event_id":   { "type": "string", "format": "uuid" },
+    "job_id":     { "type": "string", "format": "uuid" },
+    "principal_id": { "type": "string", "format": "uuid" },
+    "principal_kind": { "type": "string", "enum": ["human", "agent", "service"] },
+    "org_id":     { "type": "string", "format": "uuid" },
+    "repo_id":    { "type": "string", "format": "uuid" },
+    "tier":       { "type": "string", "enum": ["hot", "cold"] },
+    "vcpu_seconds":     { "type": "number", "minimum": 0 },
+    "memory_mb_seconds": { "type": "number", "minimum": 0 },
+    "egress_kb":  { "type": "integer", "minimum": 0 },
+    "exit_code":  { "type": "integer" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "_envelope_version": { "type": "integer", "minimum": 1 }
+  }
+}

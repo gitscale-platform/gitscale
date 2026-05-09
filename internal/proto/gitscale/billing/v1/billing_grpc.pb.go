@@ -25,6 +25,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	BillingService_RecordPartitionArchived_FullMethodName = "/gitscale.billing.v1.BillingService/RecordPartitionArchived"
 	BillingService_RecordDEKDestroyed_FullMethodName      = "/gitscale.billing.v1.BillingService/RecordDEKDestroyed"
+	BillingService_GetQuotaAccount_FullMethodName         = "/gitscale.billing.v1.BillingService/GetQuotaAccount"
+	BillingService_RecordCIJobCompleted_FullMethodName    = "/gitscale.billing.v1.BillingService/RecordCIJobCompleted"
 )
 
 // BillingServiceClient is the client API for BillingService service.
@@ -46,6 +48,15 @@ type BillingServiceClient interface {
 	// Idempotent on (year, month, partition_name): repeated calls return the
 	// same event id and only the first call writes the outbox row.
 	RecordDEKDestroyed(ctx context.Context, in *RecordDEKDestroyedRequest, opts ...grpc.CallOption) (*RecordDEKDestroyedResponse, error)
+	// GetQuotaAccount fetches the per-org quota envelope for a principal's
+	// organisation (#110, ADR-019). CI boot activities call this to enforce
+	// per-job ceilings before allocating microVM resources.
+	GetQuotaAccount(ctx context.Context, in *GetQuotaAccountRequest, opts ...grpc.CallOption) (*GetQuotaAccountResponse, error)
+	// RecordCIJobCompleted persists the per-job billable consumption + emits
+	// ci.job_completed to the outbox in the same Tx (#110, ADR-008/019).
+	// Idempotent on job_id: repeat calls return the same event_id and only
+	// the first call writes the outbox row.
+	RecordCIJobCompleted(ctx context.Context, in *RecordCIJobCompletedRequest, opts ...grpc.CallOption) (*RecordCIJobCompletedResponse, error)
 }
 
 type billingServiceClient struct {
@@ -76,6 +87,26 @@ func (c *billingServiceClient) RecordDEKDestroyed(ctx context.Context, in *Recor
 	return out, nil
 }
 
+func (c *billingServiceClient) GetQuotaAccount(ctx context.Context, in *GetQuotaAccountRequest, opts ...grpc.CallOption) (*GetQuotaAccountResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetQuotaAccountResponse)
+	err := c.cc.Invoke(ctx, BillingService_GetQuotaAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *billingServiceClient) RecordCIJobCompleted(ctx context.Context, in *RecordCIJobCompletedRequest, opts ...grpc.CallOption) (*RecordCIJobCompletedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordCIJobCompletedResponse)
+	err := c.cc.Invoke(ctx, BillingService_RecordCIJobCompleted_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BillingServiceServer is the server API for BillingService service.
 // All implementations must embed UnimplementedBillingServiceServer
 // for forward compatibility.
@@ -95,6 +126,15 @@ type BillingServiceServer interface {
 	// Idempotent on (year, month, partition_name): repeated calls return the
 	// same event id and only the first call writes the outbox row.
 	RecordDEKDestroyed(context.Context, *RecordDEKDestroyedRequest) (*RecordDEKDestroyedResponse, error)
+	// GetQuotaAccount fetches the per-org quota envelope for a principal's
+	// organisation (#110, ADR-019). CI boot activities call this to enforce
+	// per-job ceilings before allocating microVM resources.
+	GetQuotaAccount(context.Context, *GetQuotaAccountRequest) (*GetQuotaAccountResponse, error)
+	// RecordCIJobCompleted persists the per-job billable consumption + emits
+	// ci.job_completed to the outbox in the same Tx (#110, ADR-008/019).
+	// Idempotent on job_id: repeat calls return the same event_id and only
+	// the first call writes the outbox row.
+	RecordCIJobCompleted(context.Context, *RecordCIJobCompletedRequest) (*RecordCIJobCompletedResponse, error)
 	mustEmbedUnimplementedBillingServiceServer()
 }
 
@@ -110,6 +150,12 @@ func (UnimplementedBillingServiceServer) RecordPartitionArchived(context.Context
 }
 func (UnimplementedBillingServiceServer) RecordDEKDestroyed(context.Context, *RecordDEKDestroyedRequest) (*RecordDEKDestroyedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecordDEKDestroyed not implemented")
+}
+func (UnimplementedBillingServiceServer) GetQuotaAccount(context.Context, *GetQuotaAccountRequest) (*GetQuotaAccountResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetQuotaAccount not implemented")
+}
+func (UnimplementedBillingServiceServer) RecordCIJobCompleted(context.Context, *RecordCIJobCompletedRequest) (*RecordCIJobCompletedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordCIJobCompleted not implemented")
 }
 func (UnimplementedBillingServiceServer) mustEmbedUnimplementedBillingServiceServer() {}
 func (UnimplementedBillingServiceServer) testEmbeddedByValue()                        {}
@@ -168,6 +214,42 @@ func _BillingService_RecordDEKDestroyed_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BillingService_GetQuotaAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetQuotaAccountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BillingServiceServer).GetQuotaAccount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BillingService_GetQuotaAccount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BillingServiceServer).GetQuotaAccount(ctx, req.(*GetQuotaAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BillingService_RecordCIJobCompleted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordCIJobCompletedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BillingServiceServer).RecordCIJobCompleted(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BillingService_RecordCIJobCompleted_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BillingServiceServer).RecordCIJobCompleted(ctx, req.(*RecordCIJobCompletedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BillingService_ServiceDesc is the grpc.ServiceDesc for BillingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -182,6 +264,14 @@ var BillingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RecordDEKDestroyed",
 			Handler:    _BillingService_RecordDEKDestroyed_Handler,
+		},
+		{
+			MethodName: "GetQuotaAccount",
+			Handler:    _BillingService_GetQuotaAccount_Handler,
+		},
+		{
+			MethodName: "RecordCIJobCompleted",
+			Handler:    _BillingService_RecordCIJobCompleted_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -85,6 +85,66 @@ func (s *PostgresService) RecordPartitionArchived(ctx context.Context, in Record
 	return RecordPartitionArchivedOutput{ArchiveID: archiveID.String(), Created: created}, nil
 }
 
+// GetQuotaAccount returns the per-org quota envelope used by CI boot
+// activities (#110, ADR-019). Read-only — no Tx needed; quota_accounts
+// are mutated only at provisioning time.
+func (s *PostgresService) GetQuotaAccount(ctx context.Context, in GetQuotaAccountInput) (GetQuotaAccountOutput, error) {
+	if in.OrgID == uuid.Nil {
+		return GetQuotaAccountOutput{}, ErrEmptyOrgID
+	}
+	qa, err := s.store.Billing().GetQuotaAccountByOrg(ctx, in.OrgID)
+	if err != nil {
+		return GetQuotaAccountOutput{}, err
+	}
+	if qa == nil {
+		return GetQuotaAccountOutput{}, ErrQuotaAccountNotFound
+	}
+	return GetQuotaAccountOutput{
+		AccountID:                 qa.ID,
+		OrgID:                     qa.OrgID,
+		PlanTier:                  qa.PlanTier,
+		TokensPerWeekCap:          qa.TokensPerWeekCap,
+		ComputeMinutesPerMonthCap: qa.ComputeMinutesPerMonthCap,
+		StorageGBCap:              qa.StorageGBCap,
+	}, nil
+}
+
+// RecordCIJobCompleted writes ci.job_completed to the outbox in one Tx
+// (#110, ADR-008/019). The outbox row is the source of truth at this
+// revision — rollup into usage_events is downstream consumer territory.
+// Idempotency is anchored on ciJobCompletedAggregateID(JobID).
+func (s *PostgresService) RecordCIJobCompleted(ctx context.Context, in RecordCIJobCompletedInput) (RecordCIJobCompletedOutput, error) {
+	if err := validateCIJobInput(in); err != nil {
+		return RecordCIJobCompletedOutput{}, err
+	}
+	aggregateID := ciJobCompletedAggregateID(in.JobID)
+	occurredAt := s.clock()
+	var created bool
+	err := s.store.Transact(ctx, func(tx store.Tx) error {
+		exists, err := tx.Billing().HasOutboxEventForAggregate(ctx, EventTypeCIJobCompleted, aggregateID)
+		if err != nil {
+			return err
+		}
+		if exists {
+			created = false
+			return nil
+		}
+		created = true
+		return tx.WriteOutbox(
+			ctx,
+			store.DomainBilling,
+			"ci_job",
+			aggregateID,
+			EventTypeCIJobCompleted,
+			newCIJobCompletedPayload(in, aggregateID, occurredAt),
+		)
+	})
+	if err != nil {
+		return RecordCIJobCompletedOutput{}, err
+	}
+	return RecordCIJobCompletedOutput{EventID: aggregateID.String(), Created: created}, nil
+}
+
 // dekDestroyedNamespace anchors the deterministic UUID derivation for the
 // outbox aggregate_id of a billing.partition_dek_destroyed event. Stable
 // across versions; bump only when changing the natural-key shape.

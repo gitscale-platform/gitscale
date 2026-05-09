@@ -61,6 +61,18 @@ func (r *stubBillingReader) ListPartitionArchivesArchivedBefore(_ context.Contex
 	return out, nil
 }
 
+// GetQuotaAccountByOrg returns the seeded QuotaAccount or (nil, nil).
+func (r *stubBillingReader) GetQuotaAccountByOrg(_ context.Context, orgID uuid.UUID) (*store.QuotaAccount, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	qa, ok := r.store.quotaAccounts[orgID]
+	if !ok {
+		return nil, nil
+	}
+	cp := qa
+	return &cp, nil
+}
+
 // HasOutboxEventForAggregate consults committed outbox records. Mirrors the
 // postgres impl's WHERE event_type=$1 AND aggregate_id=$2 query. Pending
 // (uncommitted) writes are checked separately by stubBillingWriter.
@@ -129,6 +141,13 @@ func (w *stubBillingWriter) HasOutboxEventForAggregate(ctx context.Context, even
 		}
 	}
 	return w.reader.HasOutboxEventForAggregate(ctx, eventType, aggregateID)
+}
+
+// GetQuotaAccountByOrg delegates to the reader (no Tx-pending writes for
+// quota accounts in the stub; production code has no path that mutates
+// them inside a CI-related Tx).
+func (w *stubBillingWriter) GetQuotaAccountByOrg(ctx context.Context, orgID uuid.UUID) (*store.QuotaAccount, error) {
+	return w.reader.GetQuotaAccountByOrg(ctx, orgID)
 }
 
 func (w *stubBillingWriter) GetPartitionArchiveByKey(ctx context.Context, year, month int, partitionName string) (*store.PartitionArchive, error) {
