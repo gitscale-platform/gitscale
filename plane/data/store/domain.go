@@ -11,12 +11,13 @@ const (
 	DomainCollaboration Domain = "collaboration"
 	DomainCI            Domain = "ci"
 	DomainBilling       Domain = "billing"
+	DomainGit           Domain = "git"
 )
 
 // Valid reports whether d is a known domain constant.
 func (d Domain) Valid() bool {
 	switch d {
-	case DomainIdentity, DomainRepositories, DomainCollaboration, DomainCI, DomainBilling:
+	case DomainIdentity, DomainRepositories, DomainCollaboration, DomainCI, DomainBilling, DomainGit:
 		return true
 	}
 	return false

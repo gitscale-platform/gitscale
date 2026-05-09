@@ -1,0 +1,11 @@
+{
+  "event_id": "01931a4b-9c10-7000-8000-000000000200",
+  "agent_id": "agent-test-1",
+  "repo_id": "01931a4b-9c10-7000-8000-000000000201",
+  "operation": "receive_pack",
+  "bytes_transferred": 8192,
+  "pack_objects": 12,
+  "ref_updates": 1,
+  "occurred_at": "2026-05-09T12:34:56.000000Z",
+  "_envelope_version": 1
+}

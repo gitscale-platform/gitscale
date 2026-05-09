@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/git/git.metering.schema.json",
+  "title": "git.metering",
+  "description": "Per-RPC metering event emitted by the Gitaly hook layer (ADR-015 reconciliation tier). Written to git.git_outbox by the TwoTierCounter after a successful ReceivePack/UploadPack/InfoRefs; drained by the existing outbox consumer to TopicGitMeteringEvents and applied to the analytics sink (ClickHouse). Idempotent on event_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "agent_id",
+    "repo_id",
+    "operation",
+    "bytes_transferred",
+    "pack_objects",
+    "ref_updates",
+    "occurred_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Idempotency key. Aggregates with the same event_id MUST be treated as one event by the analytics sink."
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Empty string for non-agent (human) operations; UUID-like otherwise. Drives per-agent enforcement keys."
+    },
+    "repo_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["info_refs", "upload_pack", "receive_pack"]
+    },
+    "bytes_transferred": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pack_objects": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Object count from the Gitaly pack-objects hook. Zero on info_refs and upload_pack until the Gitaly custom hook lands (Phase 3)."
+    },
+    "ref_updates": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of refs touched by the operation. Always 0 on fetch and info_refs."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}
