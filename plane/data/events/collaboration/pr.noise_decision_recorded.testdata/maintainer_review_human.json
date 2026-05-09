@@ -1,0 +1,13 @@
+{
+  "pr_id": "66666666-6666-6666-6666-666666666666",
+  "repo_id": "22222222-2222-2222-2222-222222222222",
+  "org_id": "33333333-3333-3333-3333-333333333333",
+  "decision_code": "maintainer_review",
+  "dedup_score": 0,
+  "quality_score": 0.6,
+  "reputation_score": 1.0,
+  "composite_score": 0.7,
+  "reason": "composite_in_review_band",
+  "decided_at": "2026-05-09T12:00:00Z",
+  "_envelope_version": 1
+}
