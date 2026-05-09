@@ -167,3 +167,30 @@ topics:
       consumer_spiffe_ids:
         - spiffe://gitscale.dev/ns/data/sa/billing-aggregator
         - spiffe://gitscale.dev/ns/data/sa/audit-log
+
+  # ── git metering ──────────────────────────────────────────────────────────
+  - name: gitscale.git.metering.events
+    partitions: 12
+    retention_ms: 604800000          # 7 days — Kafka is operational-only.
+    key_field: aggregate_id
+    rationale: >
+      Per-RPC metering events from the Gitaly hook layer (ADR-015). One
+      event per ReceivePack/UploadPack/InfoRefs that completes successfully.
+      ~5,000 events/sec peak across all repos; 12 partitions => ~420 ev/sec
+      per partition. ClickHouse via the analytics sink consumer is the
+      durable reconciliation store; do not extend Kafka retention.
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/analytics-sink
+        - spiffe://gitscale.dev/ns/data/sa/audit-log
+
+  - name: gitscale.git.metering.events.dlq
+    partitions: 1
+    retention_ms: 2592000000         # 30 days
+    key_field: aggregate_id
+    acls:
+      producer_spiffe_id: spiffe://gitscale.dev/ns/data/sa/outbox-consumer
+      consumer_spiffe_ids:
+        - spiffe://gitscale.dev/ns/data/sa/analytics-sink
+        - spiffe://gitscale.dev/ns/data/sa/audit-log

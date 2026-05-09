@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/git/client"
 	"github.com/gitscale-platform/gitscale/plane/git/gittypes"
@@ -49,12 +50,18 @@ func (s *fakeGitalyServer) PostReceivePack(stream gitalypb.SmartHTTPService_Post
 		return err
 	}
 	s.receivedHeader = header
-	body, err := stream.Recv()
-	if err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	if body != nil {
-		s.receivedBody = body.GetData()
+	// Drain every body chunk until the client signals end-of-stream — the
+	// proxy may send the body as N>=1 chunked PostReceivePackRequest frames
+	// (PR #120 self-review follow-up: bounded streaming).
+	for {
+		msg, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		s.receivedBody = append(s.receivedBody, msg.GetData()...)
 	}
 	return stream.Send(&gitalypb.PostReceivePackResponse{Data: s.receivePackResponse})
 }
@@ -280,4 +287,86 @@ func TestProxy_ReceivePack_RecordsMeteringEvent(t *testing.T) {
 	require.Equal(t, int64(10), rec.calls[0].bytes)
 	require.Equal(t, 2, rec.calls[0].refUpdates)
 	require.Equal(t, "agent-x", rec.calls[0].agentID)
+}
+
+// TestProxy_InfoRefs_DoesNotMeter verifies PR #120 self-review follow-up
+// (c): InfoRefs intentionally does not emit a metering event. A 0-byte
+// sentinel row provides no signal beyond the edge-plane request count and
+// dominates the analytics sink at production volume.
+func TestProxy_InfoRefs_DoesNotMeter(t *testing.T) {
+	fake := &fakeGitalyServer{infoRefsUploadData: []byte("# service=git-upload-pack\n0000")}
+	addr := startFakeGitaly(t, fake)
+	rec := &recordingMeter{}
+	proxy := newProxy(t, addr, hook.NoopHookHandler{}, rec)
+
+	rc, err := proxy.InfoRefs(context.Background(), gittypes.RepoRef{RepoID: "r"}, "git-upload-pack")
+	require.NoError(t, err)
+	_, _ = io.ReadAll(rc)
+	_ = rc.Close()
+
+	require.Empty(t, rec.calls, "InfoRefs must not call meter")
+}
+
+// TestProxy_ReceivePack_LargeBodyChunked verifies PR #120 self-review
+// follow-up (a): a body larger than the per-frame chunk size is forwarded
+// in multiple PostReceivePack frames and reassembled byte-for-byte by the
+// upstream Gitaly server. Total bytes are reported to the meter.
+func TestProxy_ReceivePack_LargeBodyChunked(t *testing.T) {
+	fake := &fakeGitalyServer{receivePackResponse: []byte("ok")}
+	addr := startFakeGitaly(t, fake)
+	rec := &recordingMeter{}
+	proxy := newProxy(t, addr, hook.NoopHookHandler{}, rec)
+
+	// 2.5 MiB of pseudo-random data — three chunks at 1 MiB each.
+	body := make([]byte, (5*(1<<20))/2)
+	for i := range body {
+		body[i] = byte(i % 251)
+	}
+
+	rc, err := proxy.ReceivePack(
+		context.Background(),
+		gittypes.RepoRef{RepoID: "r", AgentID: "agent-large"},
+		[]gittypes.RefUpdate{{RefName: "refs/heads/main"}},
+		bytes.NewReader(body),
+	)
+	require.NoError(t, err)
+	_, _ = io.ReadAll(rc)
+	_ = rc.Close()
+
+	require.Equal(t, body, fake.receivedBody, "upstream must observe the full body, byte-for-byte")
+	require.Len(t, rec.calls, 1)
+	require.Equal(t, int64(len(body)), rec.calls[0].bytes)
+}
+
+// TestProxy_ReceivePack_CloserCancelsUpstream verifies PR #120 self-review
+// follow-up (b): closing the returned reader cancels the upstream gRPC
+// context, freeing the producer goroutine even when the caller does not
+// drain the response. The fake server's blocking send returns context
+// cancellation; what matters here is that Close() does not deadlock.
+func TestProxy_ReceivePack_CloserCancelsUpstream(t *testing.T) {
+	fake := &fakeGitalyServer{receivePackResponse: []byte("ok")}
+	addr := startFakeGitaly(t, fake)
+	proxy := newProxy(t, addr, hook.NoopHookHandler{}, metering.NewNoopCounter())
+
+	rc, err := proxy.ReceivePack(
+		context.Background(),
+		gittypes.RepoRef{RepoID: "r", AgentID: "a"},
+		nil,
+		bytes.NewReader([]byte("data")),
+	)
+	require.NoError(t, err)
+
+	// Close immediately, without draining. Must not block; the producer
+	// goroutine inside streamToReader exits when the pipe writer hits a
+	// PipeError or when the upstream Recv returns due to ctx cancel.
+	done := make(chan struct{})
+	go func() {
+		_ = rc.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not return — upstream lifecycle leak")
+	}
 }

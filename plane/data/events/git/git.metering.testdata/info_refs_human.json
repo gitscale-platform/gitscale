@@ -1,0 +1,11 @@
+{
+  "event_id": "01931a4b-9c10-7000-8000-000000000202",
+  "agent_id": "",
+  "repo_id": "01931a4b-9c10-7000-8000-000000000203",
+  "operation": "info_refs",
+  "bytes_transferred": 0,
+  "pack_objects": 0,
+  "ref_updates": 0,
+  "occurred_at": "2026-05-09T12:35:00.000000Z",
+  "_envelope_version": 1
+}

@@ -26,9 +26,15 @@ const (
 
 	TopicBillingEvents    = "gitscale.billing.events"
 	TopicBillingEventsDLQ = "gitscale.billing.events.dlq"
+
+	// Git metering events feed the ADR-015 reconciliation path. Drained by
+	// the existing outbox consumer; consumed downstream by the analytics
+	// sink (ClickHouse in production; an in-memory stub for now).
+	TopicGitMeteringEvents    = "gitscale.git.metering.events"
+	TopicGitMeteringEventsDLQ = "gitscale.git.metering.events.dlq"
 )
 
-// AllMainTopics lists the five domain topics (not DLQs).
+// AllMainTopics lists every domain main topic (no DLQs).
 // Useful for consumers that subscribe to all domains (e.g. SearchIndexer, AuditLog).
 var AllMainTopics = []string{
 	TopicIdentityEvents,
@@ -36,4 +42,5 @@ var AllMainTopics = []string{
 	TopicCollaborationEvents,
 	TopicCIEvents,
 	TopicBillingEvents,
+	TopicGitMeteringEvents,
 }

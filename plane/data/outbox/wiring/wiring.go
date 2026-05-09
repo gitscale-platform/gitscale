@@ -48,6 +48,11 @@ var AllDomains = []DomainConfig{
 		Table:  store.DomainBilling.OutboxTable(),
 		Topic:  kafkadata.TopicBillingEvents,
 	},
+	{
+		Domain: store.DomainGit,
+		Table:  store.DomainGit.OutboxTable(),
+		Topic:  kafkadata.TopicGitMeteringEvents,
+	},
 }
 
 // StartAll creates one OutboxConsumer per domain, starts each in its own
