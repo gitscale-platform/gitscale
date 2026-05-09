@@ -111,10 +111,10 @@ type ApprovalService interface {
 	GetPlanStatus(ctx context.Context, planID uuid.UUID) (PlanStatus, error)
 }
 
-// AlreadyDecided is returned (wrapped in APIError{CodePlanAlreadyDecided})
+// ErrAlreadyDecided is returned (wrapped in APIError{CodePlanAlreadyDecided})
 // when RecordDecision or Escalate observes a non-pending plan. ADR-015:
 // no double-decision once approved/rejected/expired/auto_*.
-var AlreadyDecided = errors.New("policy: plan already decided")
+var ErrAlreadyDecided = errors.New("policy: plan already decided")
 
 // NewAPIError constructs an APIError. Convenience for service implementers.
 func NewAPIError(code, msg string) *APIError {
