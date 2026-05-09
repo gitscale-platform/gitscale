@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/collaboration/issue_noise.routing_decided.schema.json",
+  "title": "issue_noise.routing_decided",
+  "description": "Emitted by plane/application/issuenoise.Router on every routing decision (spam, low_quality, duplicate, normal). Payload of the collaboration_outbox row whose event_type = 'issue_noise.routing_decided'. Issue: https://github.com/gitscale-platform/gitscale/issues/117 — Spec: docs/superpowers/specs/2026-05-09-issue-117-issue-noise-filtering-design.md",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "issue_id",
+    "repo_id",
+    "reporter_id",
+    "verdict",
+    "scorer_version",
+    "score_spam",
+    "score_low_quality",
+    "score_duplicate",
+    "signals",
+    "decided_at",
+    "decided_by",
+    "enforced",
+    "_envelope_version"
+  ],
+  "properties": {
+    "issue_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "repo_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reporter_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["normal", "low_quality", "duplicate", "spam"]
+    },
+    "scorer_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "score_spam": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "score_low_quality": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "score_duplicate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "duplicate_of": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "weight", "detail"],
+        "properties": {
+          "name":   { "type": "string", "minLength": 1 },
+          "weight": { "type": "number" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "'auto' for scorer-driven decisions; 'maintainer:<uuid>' for manual interventions."
+    },
+    "enforced": {
+      "type": "boolean",
+      "description": "False during the dark-launch window — verdict computed but issue admitted as open."
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}

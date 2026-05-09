@@ -1,0 +1,16 @@
+{
+  "issue_id": "01931a4b-9c10-7000-8000-000000000011",
+  "repo_id": "01931a4b-9c10-7000-8000-000000000020",
+  "reporter_id": "01931a4b-9c10-7000-8000-000000000031",
+  "verdict": "normal",
+  "scorer_version": "rule-v1",
+  "score_spam": 0.000,
+  "score_low_quality": 0.000,
+  "score_duplicate": 0.000,
+  "duplicate_of": null,
+  "signals": [],
+  "decided_at": "2026-05-09T12:35:01.000000Z",
+  "decided_by": "auto",
+  "enforced": false,
+  "_envelope_version": 1
+}
