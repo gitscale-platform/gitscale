@@ -7,13 +7,13 @@ package stub
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/gitscale-platform/gitscale/plane/data/store"
 	"github.com/google/uuid"
 )
-
-var errNotImplemented = errors.New("stub: not implemented")
 
 // OutboxRecord captures one WriteOutbox call for test assertions.
 type OutboxRecord struct {
@@ -30,6 +30,7 @@ type Store struct {
 	mu                sync.Mutex
 	users             map[uuid.UUID]*store.HumanUser
 	agents            map[uuid.UUID]*store.AgentIdentity
+	repositories      map[uuid.UUID]*store.Repository
 	partitionArchives map[string]store.PartitionArchive
 	outbox            []OutboxRecord
 }
@@ -39,6 +40,7 @@ func New() *Store {
 	return &Store{
 		users:             make(map[uuid.UUID]*store.HumanUser),
 		agents:            make(map[uuid.UUID]*store.AgentIdentity),
+		repositories:      make(map[uuid.UUID]*store.Repository),
 		partitionArchives: make(map[string]store.PartitionArchive),
 	}
 }
@@ -68,6 +70,9 @@ func (s *Store) Transact(_ context.Context, fn func(store.Tx) error) error {
 	for id, a := range tx.pendingAgents {
 		s.agents[id] = a
 	}
+	for id, r := range tx.pendingRepositories {
+		s.repositories[id] = r
+	}
 	for k, pa := range tx.pendingPartitionArchives {
 		// First-writer-wins on commit: do not overwrite an existing row.
 		// The Tx.Billing() writer already returns the existing id on
@@ -87,7 +92,7 @@ func (s *Store) Identity() store.IdentityReader {
 
 // Repositories returns a stub repository reader.
 func (s *Store) Repositories() store.RepositoryReader {
-	return &stubRepositoryReader{}
+	return &stubRepositoryReader{store: s}
 }
 
 // stubTx is the transaction handle passed to Transact callbacks.
@@ -95,6 +100,7 @@ type stubTx struct {
 	store                    *Store
 	pendingUsers             map[uuid.UUID]*store.HumanUser
 	pendingAgents            map[uuid.UUID]*store.AgentIdentity
+	pendingRepositories      map[uuid.UUID]*store.Repository
 	pendingPartitionArchives map[string]store.PartitionArchive
 	pendingOutbox            []OutboxRecord
 }
@@ -106,6 +112,9 @@ func (t *stubTx) lazyInit() {
 	if t.pendingAgents == nil {
 		t.pendingAgents = make(map[uuid.UUID]*store.AgentIdentity)
 	}
+	if t.pendingRepositories == nil {
+		t.pendingRepositories = make(map[uuid.UUID]*store.Repository)
+	}
 }
 
 func (t *stubTx) Identity() store.IdentityWriter {
@@ -113,7 +122,7 @@ func (t *stubTx) Identity() store.IdentityWriter {
 }
 
 func (t *stubTx) Repositories() store.RepositoryWriter {
-	return &stubRepositoryWriter{}
+	return &stubRepositoryWriter{tx: t, reader: &stubRepositoryReader{store: t.store}}
 }
 
 func (t *stubTx) WriteOutbox(
@@ -343,22 +352,120 @@ func (w *stubIdentityWriter) RemoveOrgMember(_ context.Context, _, _ uuid.UUID) 
 	return nil
 }
 
-type stubRepositoryReader struct{}
-
-func (r *stubRepositoryReader) GetByID(_ context.Context, _ uuid.UUID) (*store.Repository, error) {
-	return nil, errNotImplemented
+type stubRepositoryReader struct {
+	store *Store
 }
 
-func (r *stubRepositoryReader) GetBySlug(_ context.Context, _ string) (*store.Repository, error) {
-	return nil, errNotImplemented
+func (r *stubRepositoryReader) GetByID(_ context.Context, id uuid.UUID) (*store.Repository, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	rep := r.store.repositories[id]
+	if rep == nil {
+		return nil, nil
+	}
+	cp := *rep
+	return &cp, nil
 }
 
-type stubRepositoryWriter struct{ stubRepositoryReader }
+func (r *stubRepositoryReader) GetBySlug(_ context.Context, slug string) (*store.Repository, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	for _, rep := range r.store.repositories {
+		if rep.Slug == slug {
+			cp := *rep
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
 
-func (w *stubRepositoryWriter) Insert(_ context.Context, _ store.Repository) error {
-	return errNotImplemented
+func (r *stubRepositoryReader) ListByOrg(
+	_ context.Context,
+	orgID uuid.UUID,
+	afterCreatedAt *time.Time,
+	afterID *uuid.UUID,
+	limit int,
+) ([]store.Repository, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+
+	var all []store.Repository
+	for _, rep := range r.store.repositories {
+		if rep.OrgID != orgID {
+			continue
+		}
+		all = append(all, *rep)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].CreatedAt.Equal(all[j].CreatedAt) {
+			return all[i].CreatedAt.Before(all[j].CreatedAt)
+		}
+		return all[i].ID.String() < all[j].ID.String()
+	})
+
+	out := make([]store.Repository, 0, limit)
+	for _, rep := range all {
+		if afterCreatedAt != nil && afterID != nil {
+			if rep.CreatedAt.Before(*afterCreatedAt) {
+				continue
+			}
+			if rep.CreatedAt.Equal(*afterCreatedAt) && rep.ID.String() <= afterID.String() {
+				continue
+			}
+		}
+		out = append(out, rep)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+type stubRepositoryWriter struct {
+	tx     *stubTx
+	reader *stubRepositoryReader
+}
+
+func (w *stubRepositoryWriter) GetByID(ctx context.Context, id uuid.UUID) (*store.Repository, error) {
+	w.tx.lazyInit()
+	if r, ok := w.tx.pendingRepositories[id]; ok {
+		cp := *r
+		return &cp, nil
+	}
+	return w.reader.GetByID(ctx, id)
+}
+
+func (w *stubRepositoryWriter) GetBySlug(ctx context.Context, slug string) (*store.Repository, error) {
+	w.tx.lazyInit()
+	for _, r := range w.tx.pendingRepositories {
+		if r.Slug == slug {
+			cp := *r
+			return &cp, nil
+		}
+	}
+	return w.reader.GetBySlug(ctx, slug)
+}
+
+func (w *stubRepositoryWriter) ListByOrg(
+	ctx context.Context,
+	orgID uuid.UUID,
+	afterCreatedAt *time.Time,
+	afterID *uuid.UUID,
+	limit int,
+) ([]store.Repository, error) {
+	return w.reader.ListByOrg(ctx, orgID, afterCreatedAt, afterID, limit)
+}
+
+func (w *stubRepositoryWriter) Insert(_ context.Context, r store.Repository) error {
+	w.tx.lazyInit()
+	cp := r
+	w.tx.pendingRepositories[r.ID] = &cp
+	return nil
 }
 
 func (w *stubRepositoryWriter) UpdatePermissions(_ context.Context, _ uuid.UUID, _ string) error {
-	return errNotImplemented
+	return errors.New("stub: UpdatePermissions not implemented")
 }

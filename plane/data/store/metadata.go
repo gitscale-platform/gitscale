@@ -132,23 +132,43 @@ type IdentityWriter interface {
 }
 
 // Repository is the repositories.repositories row model (minimal projection).
+//
+// Name + OwnerID + Visibility are required by the underlying SQL schema
+// (see migrations/002_repositories.sql); they were added to this struct in
+// the REST API layer (issue #111) which needs to round-trip them.
 type Repository struct {
 	ID            uuid.UUID
-	Slug          string
 	OrgID         uuid.UUID
+	Name          string
+	Slug          string
+	OwnerID       uuid.UUID
+	DefaultBranch string
+	Visibility    string
 	ReplicaSetID  string
 	HomeRegion    string
 	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // RepositoryReader exposes read-only queries against the repositories domain.
 type RepositoryReader interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*Repository, error)
 	GetBySlug(ctx context.Context, slug string) (*Repository, error)
+	// ListByOrg returns repositories belonging to orgID with stable
+	// (created_at, id) ordering, starting strictly after the supplied
+	// cursor (nil cursors mean start). limit is the maximum number of rows
+	// returned; the caller is responsible for capping it (REST handler
+	// caps at 100 per ADR-017 cost analysis).
+	ListByOrg(
+		ctx context.Context,
+		orgID uuid.UUID,
+		afterCreatedAt *time.Time,
+		afterID *uuid.UUID,
+		limit int,
+	) ([]Repository, error)
 }
 
 // RepositoryWriter exposes write operations against the repositories domain.
-// Not implemented in #14; bodies return errNotImplemented.
 type RepositoryWriter interface {
 	RepositoryReader
 	Insert(ctx context.Context, r Repository) error

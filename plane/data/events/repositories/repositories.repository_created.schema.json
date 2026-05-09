@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/repositories/repositories.repository_created.schema.json",
+  "title": "repositories.repository_created",
+  "description": "Emitted when a row is inserted into repositories.repositories. Payload of the repositories_outbox row whose event_type = 'repositories.repository_created'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repository_id",
+    "org_id",
+    "owner_id",
+    "slug",
+    "name",
+    "default_branch",
+    "visibility",
+    "created_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "repository_id": { "type": "string", "format": "uuid" },
+    "org_id":        { "type": "string", "format": "uuid" },
+    "owner_id":      { "type": "string", "format": "uuid" },
+    "slug":          { "type": "string", "minLength": 1, "maxLength": 100 },
+    "name":          { "type": "string", "minLength": 1 },
+    "default_branch":{ "type": "string", "minLength": 1 },
+    "visibility":    { "type": "string", "enum": ["public", "private", "internal"] },
+    "created_at":    { "type": "string", "format": "date-time" },
+    "_envelope_version": { "type": "integer", "minimum": 1 }
+  }
+}
