@@ -134,6 +134,9 @@ func (stubIdentityService) AddOrgMember(context.Context, uuid.UUID, uuid.UUID, s
 func (stubIdentityService) RemoveOrgMember(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
+func (stubIdentityService) MintCloneToken(context.Context, uuid.UUID, uuid.UUID) (identity.CloneToken, error) {
+	return identity.CloneToken{}, nil
+}
 
 func mustExecute(t *testing.T, ctx context.Context, src string) resolvers.Result {
 	t.Helper()
