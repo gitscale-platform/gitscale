@@ -794,7 +794,17 @@ GitScale-specific extensions to the AGENTS.md predicate vocabulary are flagged w
 
 ---
 
-## 10. Cross-references
+## 10. Test topology strategy
+
+GitScale tests run in three topologies, all on a single host (laptop or CI runner): `single`, `quorum` (3-node), and `full` (plane-multiplexed). Functional and performance scenarios are tagged on two orthogonal axes — topology (`topo_single` / `topo_quorum` / `topo_full`) and kind (`perf`, `chaos_link`, `chaos_blast`). Performance is a nightly regression smoke gate, not an SLO gate, and runs only on self-hosted pinned-CPU runners with a Mann-Whitney U statistical comparison against a rolling 7-run main-branch baseline.
+
+Single-host green CI does NOT prove: real fsync durability, gray-failure asymmetry, lease/fencing under clock skew, torn-write recovery, full (10,4) Reed-Solomon reconstruction, absolute SLO, or multi-tenant class isolation under independent network sources. Each of these is tracked against a separate real-infra epic.
+
+Full design: [`docs/superpowers/specs/2026-05-09-issue-132-multi-topology-test-harness-design.md`](superpowers/specs/2026-05-09-issue-132-multi-topology-test-harness-design.md).
+
+---
+
+## 11. Cross-references
 
 - [`architecture.md`](architecture.md) — system diagrams, ADRs, scalability and failure mode analysis, multi-region topology, operational design contracts
 - [`CLAUDE.md`](../CLAUDE.md) — repo guidance, three core principles, technology stack, branch and commit conventions

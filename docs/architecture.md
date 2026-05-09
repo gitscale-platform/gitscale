@@ -487,17 +487,17 @@ Consequences: <positive, negative, follow-ups>
 ### ADR-004: Adopted Kafka as the event bus
 
 - **Status:** Accepted
-- **Amended:** 2026-05-04
+- **Amended:** 2026-05-09
 - **Date:** TBD
 - **Context:** Search, webhooks, billing, and audit consumers must observe state changes asynchronously without coupling to the application plane. Synchronous fan-out is a tight-coupling failure mode.
 - **Decision:** Kafka is the canonical event bus. Per-partition ordering is preserved per aggregate, keyed on `aggregate_id`
   (UUID) for every topic. Repo-level or org-level ordering is not guaranteed;
   consumers requiring it must reorder by `(aggregate_id, published_at)` after
   consumption. The previous `repo_id`/`org_id` keying was rejected to avoid
-  hot-partition risk under agent traffic. Cross-partition ordering is undefined. Topics are fed by the polling-based outbox consumer reading PostgreSQL outbox tables (ADR-008).
+  hot-partition risk under agent traffic. Cross-partition ordering is undefined. Topics are fed by the polling-based outbox consumer reading PostgreSQL outbox tables (ADR-008). Brokers run replication factor 3 with `min.insync.replicas=2`; producers use `acks=all` and idempotent producer config. A topic that cannot meet ISR=2 fails writes loudly rather than silently degrading durability.
 - **Consequences:** Log semantics enable replay, fan-out, and audit. Consumers must be idempotent on `event_id`. Direct Kafka producer paths from application code are forbidden — see `.claude/skills/gitscale-outbox-check/`. Cross-links: design specs for issues #11 and #12
   (docs/superpowers/specs/2026-05-02-issue-11-outbox-consumer-design.md,
-  docs/superpowers/specs/2026-05-02-issue-12-kafka-topology-design.md).
+  docs/superpowers/specs/2026-05-02-issue-12-kafka-topology-design.md). Single-broker loss is tolerated; two-broker loss surfaces as producer failure, preserving the no-silent-data-loss contract.
 
 ### ADR-005: Adopted Go for the application plane
 
@@ -526,9 +526,10 @@ Consequences: <positive, negative, follow-ups>
 ### ADR-008: Adopted outbox-based event consistency with a polling-based outbox consumer
 
 - **Status:** Accepted
+- **Amended:** 2026-05-09
 - **Date:** TBD
 - **Context:** State changes must be observable by search, webhooks, billing, and audit consumers without dual-writes that risk divergence between the DB and the event bus. The publisher must be portable across metadata-store engines (per ADR-006) without coupling the application code to engine-specific CDC.
-- **Decision:** State-mutating SQL transactions write the source change AND an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT … WHERE processed = false ORDER BY created_at LIMIT N` loop) drains each outbox table and publishes to Kafka with idempotent producer config. Outbox rows TTL-expire 24 h after the consumer high-water mark advances past them. Consumers must be idempotent on `event_id`.
+- **Decision:** State-mutating SQL transactions write the source change AND an `outbox` row in the same transaction. The caller is acknowledged on DB commit, not on Kafka publication. A polling-based outbox consumer (advisory-locked `SELECT … WHERE processed = false ORDER BY created_at LIMIT N` loop) drains each outbox table and publishes to Kafka with idempotent producer config. Outbox rows TTL-expire 24 h after the consumer high-water mark advances past them. Consumers must be idempotent on `event_id`. The outbox consumer tolerates up to 30 s of PostgreSQL primary→replica lag without skipping events; events past that threshold trigger a paging alert on `outbox_replica_lag_seconds`. Read-replica reads are forbidden for the outbox draining loop — the consumer reads the primary directly.
 - **Consequences:** No dual-write race. Publish latency bounded by poll interval (default 1s; tunable). At-least-once delivery contract; consumers carry the idempotency burden. Logical replication or engine-native CDC is the upgrade path if poll latency becomes a constraint, swappable behind the same `EventQueue` interface. See ADR-019 for the workflow-plane variant of this invariant.
 
 ### ADR-009: Adopted Redis for the rate-limit and identity cache
