@@ -1,0 +1,143 @@
+"GitScale GraphQL — field-stable GitHub-compat subset (issue #113, ADR-017)."
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+scalar DateTime
+scalar URI
+
+directive @cost(weight: Int! = 1, multipliers: [String!]) on FIELD_DEFINITION
+directive @liveRead on FIELD_DEFINITION | FIELD
+directive @gitscaleExtension on FIELD_DEFINITION | OBJECT
+
+enum PRState {
+  OPEN
+  CLOSED
+  MERGED
+}
+
+type Query {
+  repository(owner: String!, name: String!): Repository @cost(weight: 1)
+  user(login: String!): User @cost(weight: 1)
+  agent(id: ID!): Agent @cost(weight: 1) @gitscaleExtension
+  pullRequest(id: ID!): PullRequest @cost(weight: 2)
+  organization(login: String!): Organization @cost(weight: 1)
+}
+
+type Repository {
+  id: ID!
+  name: String!
+  nameWithOwner: String!
+  owner: User! @cost(weight: 1)
+  defaultBranch: Ref
+  visibility: String!
+  pullRequests(first: Int, after: String, states: [PRState!]): PullRequestConnection! @cost(weight: 2, multipliers: ["first"])
+  issues(first: Int, after: String): IssueConnection! @cost(weight: 2, multipliers: ["first"])
+  createdAt: DateTime!
+}
+
+type Ref {
+  name: String!
+  prefix: String!
+}
+
+type User {
+  id: ID!
+  login: String!
+  name: String
+  email: String
+  createdAt: DateTime!
+}
+
+type Agent @gitscaleExtension {
+  id: ID!
+  displayName: String!
+  parentUserId: ID!
+  permissionScope: [String!]!
+  reputationScore: Float!
+  createdAt: DateTime!
+}
+
+type Organization {
+  id: ID!
+  login: String!
+  members(first: Int, after: String): UserConnection! @cost(weight: 2, multipliers: ["first"])
+}
+
+type PullRequest {
+  id: ID!
+  number: Int!
+  title: String!
+  state: PRState!
+  author: User
+  createdAt: DateTime!
+}
+
+type Issue {
+  id: ID!
+  number: Int!
+  title: String!
+  state: String!
+  createdAt: DateTime!
+}
+
+type PullRequestConnection {
+  nodes: [PullRequest!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type IssueConnection {
+  nodes: [Issue!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type UserConnection {
+  nodes: [User!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+}
+
+input CreatePullRequestInput {
+  repositoryId: ID!
+  baseRef: String!
+  headRef: String!
+  title: String!
+  body: String
+}
+
+type CreatePullRequestPayload {
+  pullRequest: PullRequest
+}
+
+input CreateAgentInput {
+  parentUserId: ID!
+  displayName: String!
+  permissionScope: [String!]!
+}
+
+type CreateAgentPayload {
+  agent: Agent
+}
+
+input UpdateAgentPermissionsInput {
+  agentId: ID!
+  permissionScope: [String!]!
+}
+
+type UpdateAgentPermissionsPayload {
+  agent: Agent
+}
+
+type Mutation {
+  createPullRequest(input: CreatePullRequestInput!): CreatePullRequestPayload! @cost(weight: 10)
+  createAgent(input: CreateAgentInput!): CreateAgentPayload! @cost(weight: 10)
+  updateAgentPermissions(input: UpdateAgentPermissionsInput!): UpdateAgentPermissionsPayload! @cost(weight: 10)
+}
