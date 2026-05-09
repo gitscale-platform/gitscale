@@ -13,7 +13,13 @@ import (
 //go:embed lua/token_bucket.lua
 var tokenBucketLuaScript string
 
-var tokenBucketScript = redis.NewScript(tokenBucketLuaScript)
+//go:embed lua/token_bucket_inspect.lua
+var tokenBucketInspectLuaScript string
+
+var (
+	tokenBucketScript        = redis.NewScript(tokenBucketLuaScript)
+	tokenBucketInspectScript = redis.NewScript(tokenBucketInspectLuaScript)
+)
 
 // RedisLimiter implements RateLimiter using a Redis Lua token-bucket script.
 // One round-trip per Take call; cluster-safe (single key per call).
@@ -74,6 +80,58 @@ func (r *RedisLimiter) Take(ctx context.Context, key string, capacity, refillPer
 	}
 
 	return granted == 1, remaining, nil
+}
+
+// Inspect issues a read-only HMGET against the bucket key and returns
+// the recorded {capacity, tokens, refill}. An absent key yields a zero
+// BucketState (callers fall back to defaults). The script is cluster-safe
+// because it operates on a single key.
+func (r *RedisLimiter) Inspect(ctx context.Context, key string) (BucketState, error) {
+	result, err := tokenBucketInspectScript.Run(
+		ctx,
+		r.client,
+		[]string{key},
+	).Slice()
+	if err != nil {
+		return BucketState{}, fmt.Errorf("ratelimit: inspect %q: %w", key, err)
+	}
+	if len(result) < 3 {
+		return BucketState{}, fmt.Errorf("ratelimit: unexpected inspect length %d", len(result))
+	}
+	capStr, ok := result[0].(string)
+	if !ok {
+		return BucketState{}, fmt.Errorf("ratelimit: unexpected capacity type %T", result[0])
+	}
+	tokStr, ok := result[1].(string)
+	if !ok {
+		return BucketState{}, fmt.Errorf("ratelimit: unexpected tokens type %T", result[1])
+	}
+	refStr, ok := result[2].(string)
+	if !ok {
+		return BucketState{}, fmt.Errorf("ratelimit: unexpected refill type %T", result[2])
+	}
+	capacity, err := strconv.ParseFloat(capStr, 64)
+	if err != nil {
+		return BucketState{}, fmt.Errorf("ratelimit: parse capacity %q: %w", capStr, err)
+	}
+	tokens, err := strconv.ParseFloat(tokStr, 64)
+	if err != nil {
+		return BucketState{}, fmt.Errorf("ratelimit: parse tokens %q: %w", tokStr, err)
+	}
+	refill, err := strconv.ParseFloat(refStr, 64)
+	if err != nil {
+		return BucketState{}, fmt.Errorf("ratelimit: parse refill %q: %w", refStr, err)
+	}
+	if capacity == 0 && tokens == 0 && refill == 0 {
+		// Treat all-zero as "no recorded state" so callers see the same
+		// zero-value shape they'd get from MemoryLimiter on a missing key.
+		return BucketState{}, nil
+	}
+	return BucketState{
+		Capacity:     capacity,
+		Remaining:    tokens,
+		RefillPerSec: refill,
+	}, nil
 }
 
 // ensure RedisLimiter satisfies RateLimiter at compile time.

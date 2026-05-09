@@ -236,6 +236,28 @@ func (s *postgresService) AddOrgMember(ctx context.Context, orgID, userID uuid.U
 	})
 }
 
+func (s *postgresService) MintCloneToken(ctx context.Context, principalID, repoID uuid.UUID) (CloneToken, error) {
+	secret, err := generateCloneTokenSecret()
+	if err != nil {
+		return CloneToken{}, err
+	}
+	var out CloneToken
+	err = WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			minted, err := mintCloneTokenInTx(ctx, tx, s.clock(), principalID, repoID, secret)
+			if err != nil {
+				return err
+			}
+			out = minted
+			return nil
+		})
+	})
+	if err != nil {
+		return CloneToken{}, err
+	}
+	return out, nil
+}
+
 func (s *postgresService) RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error {
 	return WithSerializableRetry(ctx, func() error {
 		return s.store.Transact(ctx, func(tx store.Tx) error {

@@ -27,7 +27,14 @@ if tokens >= n then
   granted = 1
 end
 
-redis.call('HMSET', KEYS[1], 'tokens', tokens, 'last_ms', now_ms)
+-- We record capacity + refill alongside the live tokens so Inspect can
+-- return the bucket's shape without re-issuing a Take. The values track
+-- the most-recent Take's parameters, mirroring MemoryLimiter behaviour.
+redis.call('HMSET', KEYS[1],
+  'tokens',   tokens,
+  'last_ms',  now_ms,
+  'capacity', capacity,
+  'refill',   refill)
 redis.call('PEXPIRE', KEYS[1], ttl_ms)
 
 return {granted, tostring(tokens)}

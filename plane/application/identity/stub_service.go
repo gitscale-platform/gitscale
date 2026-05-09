@@ -28,6 +28,26 @@ func NewStubService() Service {
 	return newStubServiceWithHasher(stub.New(), NewArgon2idHasher())
 }
 
+// NewStubServiceWithStore returns a Service backed by the supplied
+// stub.Store. Used by tests that need to share the underlying store
+// (e.g. to assert outbox rows) with other consumers like a
+// repositories.Service. Skips the Argon2id hasher in favour of a noop
+// hasher — these tests do not exercise CreateUser, so the hasher is
+// never invoked.
+func NewStubServiceWithStore(s *stub.Store) Service {
+	return newStubServiceWithHasher(s, noopHasher{})
+}
+
+// noopHasher implements CredentialHasher with a placeholder — the
+// stub-with-store helper above is only safe for tests that do not call
+// CreateUser. Calling Hash returns a stable string so the surrounding
+// code does not panic if a test happens to exercise that path; Verify
+// always returns false because the placeholder is not a real hash.
+type noopHasher struct{}
+
+func (noopHasher) Hash(_ string) (string, error)              { return "$noop$1", nil }
+func (noopHasher) Verify(_, _ string) (ok bool, needRehash bool) { return false, true }
+
 func newStubServiceWithHasher(s *stub.Store, h CredentialHasher) *stubService {
 	return &stubService{store: s, hasher: h, clock: func() time.Time { return time.Now().UTC() }}
 }
@@ -230,6 +250,28 @@ func (s *stubService) AddOrgMember(ctx context.Context, orgID, userID uuid.UUID,
 				EventOrgMemberAdded, newOrgMemberAddedPayload(orgID, userID, role, s.clock()))
 		})
 	})
+}
+
+func (s *stubService) MintCloneToken(ctx context.Context, principalID, repoID uuid.UUID) (CloneToken, error) {
+	secret, err := generateCloneTokenSecret()
+	if err != nil {
+		return CloneToken{}, err
+	}
+	var out CloneToken
+	err = WithSerializableRetry(ctx, func() error {
+		return s.store.Transact(ctx, func(tx store.Tx) error {
+			minted, err := mintCloneTokenInTx(ctx, tx, s.clock(), principalID, repoID, secret)
+			if err != nil {
+				return err
+			}
+			out = minted
+			return nil
+		})
+	})
+	if err != nil {
+		return CloneToken{}, err
+	}
+	return out, nil
 }
 
 func (s *stubService) RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error {

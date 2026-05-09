@@ -121,6 +121,48 @@ func RunRateLimiterCompliance(t *testing.T, factory RateLimiterFactory) {
 		}
 	})
 
+	t.Run("inspect_absent_key_returns_zero", func(t *testing.T) {
+		t.Parallel()
+		lim, _, cleanup := factory(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		state, err := lim.Inspect(ctx, "never-touched-bucket")
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if state.Capacity != 0 || state.Remaining != 0 || state.RefillPerSec != 0 {
+			t.Fatalf("expected zero BucketState for absent key, got %+v", state)
+		}
+	})
+
+	t.Run("inspect_after_take_reflects_remaining", func(t *testing.T) {
+		t.Parallel()
+		lim, _, cleanup := factory(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		if _, _, err := lim.Take(ctx, "inspect-bucket", 10, 1, 3); err != nil {
+			t.Fatalf("Take: %v", err)
+		}
+		state, err := lim.Inspect(ctx, "inspect-bucket")
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if state.Capacity < 9.99 || state.Capacity > 10.01 {
+			t.Errorf("capacity: got %f want ≈10", state.Capacity)
+		}
+		if state.RefillPerSec < 0.99 || state.RefillPerSec > 1.01 {
+			t.Errorf("refill: got %f want ≈1", state.RefillPerSec)
+		}
+		// Remaining should be ≈ 7. Allow generous slack for Redis refill
+		// during the round-trip — refill rate is 1/s so a few-ms window
+		// adds a tiny fraction of a token.
+		if state.Remaining < 6.9 || state.Remaining > 7.5 {
+			t.Errorf("remaining: got %f want ≈7", state.Remaining)
+		}
+	})
+
 	t.Run("concurrent_takes_total_granted_equals_floor", func(t *testing.T) {
 		t.Parallel()
 		lim, _, cleanup := factory(t)

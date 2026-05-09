@@ -42,6 +42,16 @@ func rateLimitMiddleware(limiter ratelimit.RateLimiter, cfg RateConfig) func(htt
 				next.ServeHTTP(w, r)
 				return
 			}
+			// In-process loopback from the MCP server (#112): the
+			// upstream MCP rate-limit middleware has already metered the
+			// call against SurfaceMCP, so taking again here would
+			// double-bill the principal. The header alone is NOT
+			// trusted — only the context-value marker set by
+			// restapi.WithInternalCall is. See plane/application/mcp.
+			if IsInternalCall(r.Context()) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			p := PrincipalFromContext(r.Context())
 			if p == nil {
 				// Auth must always run before rate-limit. Defensive guard.

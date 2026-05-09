@@ -42,8 +42,10 @@ func (f *FakeClock) Advance(d time.Duration) {
 }
 
 type bucketState struct {
-	tokens float64
-	lastAt time.Time
+	tokens   float64
+	lastAt   time.Time
+	capacity float64
+	refill   float64
 }
 
 // MemoryLimiter implements RateLimiter with in-process state.
@@ -73,7 +75,7 @@ func (m *MemoryLimiter) Take(_ context.Context, key string, capacity, refillPerS
 	now := m.clock.Now()
 	b, ok := m.buckets[key]
 	if !ok {
-		b = &bucketState{tokens: capacity, lastAt: now}
+		b = &bucketState{tokens: capacity, lastAt: now, capacity: capacity, refill: refillPerSec}
 		m.buckets[key] = b
 	}
 
@@ -83,12 +85,41 @@ func (m *MemoryLimiter) Take(_ context.Context, key string, capacity, refillPerS
 		b.tokens = capacity
 	}
 	b.lastAt = now
+	// Track most-recent (capacity, refill) pair so Inspect callers see the
+	// shape the latest Take used. The token-bucket Lua script does the
+	// same on the Redis side via the script ARGV inputs.
+	b.capacity = capacity
+	b.refill = refillPerSec
 
 	if b.tokens < n {
 		return false, b.tokens, nil
 	}
 	b.tokens -= n
 	return true, b.tokens, nil
+}
+
+// Inspect returns a snapshot of the bucket identified by key. The
+// snapshot reflects state as of the most recent Take; refill that would
+// have accrued since that call is NOT advanced here so the report is
+// stable across concurrent inspectors. Callers that need an "as-of-now"
+// remaining value should issue a Take(n=0) instead — but that is a
+// mutation surface and the MCP `quota_status` tool intentionally uses
+// the read-only snapshot.
+func (m *MemoryLimiter) Inspect(_ context.Context, key string) (BucketState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.buckets[key]
+	if !ok {
+		// Empty BucketState signals "no recorded state for this key".
+		// Callers (e.g. the MCP tool) decide whether to fall back to a
+		// configured default capacity or to surface an empty bucket.
+		return BucketState{}, nil
+	}
+	return BucketState{
+		Capacity:     b.capacity,
+		Remaining:    b.tokens,
+		RefillPerSec: b.refill,
+	}, nil
 }
 
 // ensure MemoryLimiter satisfies RateLimiter at compile time.

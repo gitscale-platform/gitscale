@@ -64,7 +64,32 @@ type ctxKey int
 const (
 	ctxKeyPrincipal ctxKey = iota
 	ctxKeyRequestID
+	ctxKeyInternalCall
 )
+
+// WithInternalCall returns a derived context marking the request as an
+// in-process loopback issued by another application-plane component
+// (currently only plane/application/mcp). The rate-limit middleware
+// honours the marker by skipping the bucket draw — the upstream
+// component is expected to have already metered the call against its
+// own surface (e.g. SurfaceMCP), so taking again here would
+// double-charge the principal.
+//
+// The marker is intentionally a context value (not just a header): the
+// header alone is spoofable by any external caller. Only requests that
+// carry both the header AND this context value are trusted, and the
+// MCP loopback client is the only place that sets the context value.
+func WithInternalCall(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyInternalCall, true)
+}
+
+// IsInternalCall reports whether the request context was marked by
+// WithInternalCall. Exported so the in-process loopback test in the MCP
+// package can assert the sentinel actually fires.
+func IsInternalCall(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxKeyInternalCall).(bool)
+	return v
+}
 
 // WithPrincipal returns a derived context carrying p. Used by the auth
 // middleware; handlers read via PrincipalFromContext.

@@ -17,6 +17,11 @@ const (
 	EventPrincipalPermissionsChanged = "principal.permissions_changed"
 	EventOrgMemberAdded           = "org.member_added"
 	EventOrgMemberRemoved         = "org.member_removed"
+	// EventCloneTokenMinted is emitted by Service.MintCloneToken (#112
+	// MCP `git_clone`). Consumers: audit log, revocation listener (when
+	// a principal is revoked, kill outstanding tokens early). Schema:
+	// plane/data/events/identity/identity.clone_token_minted.schema.json
+	EventCloneTokenMinted = "identity.clone_token_minted"
 )
 
 // envelopeVersion is the payload-level version distinct from the
@@ -147,6 +152,30 @@ type OrgMemberAddedPayload struct {
 	AffectedPrincipalIDs []uuid.UUID `json:"affected_principal_ids"`
 	AddedAt              time.Time   `json:"added_at"`
 	EnvelopeVersion      int         `json:"_envelope_version"`
+}
+
+// CloneTokenMintedPayload is the payload of an identity.clone_token_minted
+// event. The opaque Token value is intentionally NOT included; downstream
+// consumers receive only the (token_id, principal_id, repo_id, expires_at)
+// projection so the secret never leaves the application plane via Kafka.
+type CloneTokenMintedPayload struct {
+	TokenID         uuid.UUID `json:"token_id"`
+	PrincipalID     uuid.UUID `json:"principal_id"`
+	RepoID          uuid.UUID `json:"repo_id"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	MintedAt        time.Time `json:"minted_at"`
+	EnvelopeVersion int       `json:"_envelope_version"`
+}
+
+func newCloneTokenMintedPayload(tokenID, principalID, repoID uuid.UUID, expiresAt, now time.Time) CloneTokenMintedPayload {
+	return CloneTokenMintedPayload{
+		TokenID:         tokenID,
+		PrincipalID:     principalID,
+		RepoID:          repoID,
+		ExpiresAt:       expiresAt,
+		MintedAt:        now,
+		EnvelopeVersion: envelopeVersion,
+	}
 }
 
 // OrgMemberRemovedPayload is the payload of an org.member_removed event.

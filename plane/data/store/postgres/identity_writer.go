@@ -106,6 +106,22 @@ func (w *identityWriter) AddOrgMember(ctx context.Context, m store.OrgMembership
 	return nil
 }
 
+// InsertCloneToken records a freshly-minted clone token. Lives in the
+// identity domain (same Tx as the clone_token_minted outbox event;
+// ADR-008). UNIQUE(token) is enforced by the migration so a duplicate
+// surfaces as 23505.
+func (w *identityWriter) InsertCloneToken(ctx context.Context, ct store.CloneToken) error {
+	const q = `
+		INSERT INTO identity.clone_tokens
+		  (id, token, principal_id, repo_id, expires_at)
+		VALUES ($1, $2, $3, $4, $5)`
+	_, err := w.q.Exec(ctx, q, ct.ID, ct.Token, ct.PrincipalID, ct.RepoID, ct.ExpiresAt)
+	if err != nil {
+		return fmt.Errorf("postgres: InsertCloneToken: %w", err)
+	}
+	return nil
+}
+
 func (w *identityWriter) RemoveOrgMember(ctx context.Context, orgID, userID uuid.UUID) error {
 	const q = `DELETE FROM identity.org_memberships WHERE org_id = $1 AND user_id = $2`
 	_, err := w.q.Exec(ctx, q, orgID, userID)

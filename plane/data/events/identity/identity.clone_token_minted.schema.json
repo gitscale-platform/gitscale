@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/identity/identity.clone_token_minted.schema.json",
+  "title": "identity.clone_token_minted",
+  "description": "Emitted when a short-lived clone token is minted via the MCP git_clone tool (#112). The opaque token secret is intentionally omitted from the payload; only the (token_id, principal_id, repo_id, expires_at) projection is published.",
+  "type": "object",
+  "required": ["token_id", "principal_id", "repo_id", "expires_at", "minted_at", "_envelope_version"],
+  "additionalProperties": false,
+  "properties": {
+    "token_id":          { "type": "string", "format": "uuid" },
+    "principal_id":      { "type": "string", "format": "uuid" },
+    "repo_id":           { "type": "string", "format": "uuid" },
+    "expires_at":        { "type": "string", "format": "date-time" },
+    "minted_at":         { "type": "string", "format": "date-time" },
+    "_envelope_version": { "type": "integer", "minimum": 1 }
+  }
+}
