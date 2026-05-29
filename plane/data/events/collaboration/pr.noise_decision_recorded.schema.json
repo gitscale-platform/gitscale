@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitscale.io/events/collaboration/pr.noise_decision_recorded.schema.json",
+  "title": "pr.noise_decision_recorded",
+  "description": "Emitted when the PR noise pipeline records a terminal Decision in collaboration.pr_noise_decisions. Payload of the collaboration_outbox row whose event_type = 'pr.noise_decision_recorded'. ADR-008 invariant: this row commits in the same Tx as the source decision row. Downstream consumers (webhook delivery worker, audit, future reputation feedback loop) MUST idempotency-key on event_id, NOT on pr_id — re-scoring an existing PR upserts the source row but emits a new outbox row.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pr_id",
+    "repo_id",
+    "org_id",
+    "decision_code",
+    "dedup_score",
+    "quality_score",
+    "reputation_score",
+    "composite_score",
+    "reason",
+    "decided_at",
+    "_envelope_version"
+  ],
+  "properties": {
+    "pr_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "repo_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "org_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "agent_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Authoring agent. Absent (omitted) for human-authored PRs."
+    },
+    "decision_code": {
+      "type": "string",
+      "enum": ["auto_merge_eligible", "maintainer_review", "reject"]
+    },
+    "dedup_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "duplicate_of": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "PR ID this PR was found to duplicate. Absent unless dedup_score == 1.0."
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reputation_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "composite_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason": {
+      "type": "string",
+      "description": "Stable machine-readable rationale string. One of: duplicate, composite_above_auto_merge, composite_in_review_band, composite_below_reject."
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "_envelope_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}
